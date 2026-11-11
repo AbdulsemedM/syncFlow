@@ -8,6 +8,7 @@ environment:
 workspace:
   - packages/syncflow
   - packages/syncflow_test
+  - packages/syncflow_drift
 
 dev_dependencies:
   lints: ^5.1.0

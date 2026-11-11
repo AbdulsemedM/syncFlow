@@ -33,27 +33,26 @@ final class OperationQueue {
   /// Whether operations on the same entity are delivered strictly in order.
   final bool serializeEntityOperations;
 
-  // Tail of the enqueue chain: enqueues run one at a time so that two
-  // concurrent mutations of one entity cannot pick the same predecessor.
-  Future<void> _tail = Future.value();
-
   /// Durably records [mutation] for [accountId] and returns the new operation.
   ///
   /// Every dependency must already exist and belong to the same account, so
   /// the dependency graph is acyclic by construction. Throws an
   /// [InvalidDependencyException] otherwise.
   ///
-  /// This method only writes the operation. It does not make the application's
-  /// own local write atomic with the outbox insertion; that requires a
-  /// transaction-aware storage adapter.
+  /// The lookup of the entity's previous operation and the insertion run in
+  /// one storage transaction, so concurrent mutations of one entity always
+  /// form a chain.
+  ///
+  /// **Transactional outbox:** call this inside your database transaction (for
+  /// Drift, `database.transaction`) when the storage shares that database. The
+  /// local write and the operation are then committed together or not at all.
+  /// With a separate storage, a crash between the two writes can lose or
+  /// orphan one of them.
   Future<SyncOperation> enqueue(
     SyncMutation mutation, {
     required String accountId,
-  }) {
-    final result = _tail.then((_) => _enqueue(mutation, accountId));
-    _tail = result.then<void>((_) {}, onError: (Object _) {});
-    return result;
-  }
+  }) =>
+      _storage.runInTransaction(() => _enqueue(mutation, accountId));
 
   Future<SyncOperation> _enqueue(
       SyncMutation mutation, String accountId) async {

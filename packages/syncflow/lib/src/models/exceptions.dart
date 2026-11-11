@@ -114,6 +114,19 @@ final class InvalidDependencyException extends SyncFlowException {
   String get name => 'InvalidDependencyException';
 }
 
+/// Thrown when the storage backend fails (I/O errors, constraint violations,
+/// unsupported schema versions, ...).
+final class SyncStorageException extends SyncFlowException {
+  /// Creates a storage failure.
+  const SyncStorageException(super.message, {this.cause});
+
+  /// The underlying backend error, for internal diagnostics only.
+  final Object? cause;
+
+  @override
+  String get name => 'SyncStorageException';
+}
+
 /// Thrown by a transport when no HTTP response could be obtained.
 ///
 /// Transports return a response for every HTTP status code, including 4xx and

@@ -1,3 +1,10 @@
+## 0.3.0-dev.1
+
+- `InMemorySyncStorage.runInTransaction` with savepoint rollback; all calls
+  are serialized like a database's writers.
+- Transaction contract tests: commit, rollback, nested savepoints, isolation
+  from outside readers.
+
 ## 0.2.0-dev.1
 
 - `FakeSyncTransport`: scriptable transport that records requests.

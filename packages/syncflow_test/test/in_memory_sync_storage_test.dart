@@ -26,8 +26,8 @@ void main() {
         id: 'op-1',
         payload: {'when': DateTime.utc(2026)},
       );
-      expect(
-        () => storage.insertOperation(operation),
+      await expectLater(
+        storage.insertOperation(operation),
         throwsA(isA<JsonUnsupportedObjectError>()),
       );
       expect(storage.length, 0);

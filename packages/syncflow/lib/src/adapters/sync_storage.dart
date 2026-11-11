@@ -33,6 +33,20 @@ abstract interface class SyncStorage {
   /// Must be called once before any other method.
   Future<void> initialize();
 
+  /// Runs [action] as one atomic unit and returns its result.
+  ///
+  /// Every storage call made while [action] runs (in its zone) belongs to the
+  /// transaction. The changes are committed together when [action] completes
+  /// and rolled back if it throws; the error is then rethrown. Nested calls
+  /// behave like savepoints: a failing nested call rolls back only its own
+  /// changes. Calls from outside the transaction are not interleaved with it.
+  ///
+  /// Adapters that share a database with the application (such as Drift) also
+  /// include the application's own writes made inside [action]. That is what
+  /// makes the transactional outbox possible: a local business write and its
+  /// operation are committed together or not at all.
+  Future<T> runInTransaction<T>(Future<T> Function() action);
+
   /// Persists a new [operation].
   ///
   /// Throws a [DuplicateOperationException] if an operation with the same ID

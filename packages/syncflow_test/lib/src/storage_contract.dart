@@ -522,6 +522,87 @@ void runSyncStorageContractTests(
       });
     });
 
+    group('transactions', () {
+      SyncCheckpoint cursorAt(String cursor) => SyncCheckpoint(
+            accountId: 'account-a',
+            entityName: 'customers',
+            cursor: cursor,
+            updatedAt: t0,
+          );
+
+      test('commits every write and returns the result', () async {
+        final result = await storage.runInTransaction(() async {
+          await storage.insertOperation(buildTestOperation(id: 'op-1'));
+          await storage.insertOperation(buildTestOperation(id: 'op-2'));
+          return 42;
+        });
+
+        expect(result, 42);
+        expect(await storage.getOperation('op-1'), isNotNull);
+        expect(await storage.getOperation('op-2'), isNotNull);
+      });
+
+      test('rolls back every write when the action throws', () async {
+        await storage.insertOperation(buildTestOperation(id: 'existing'));
+        await storage.saveCheckpoint(cursorAt('1'));
+        final existing = (await storage.getOperation('existing'))!;
+
+        await expectLater(
+          storage.runInTransaction<void>(() async {
+            await storage.insertOperation(buildTestOperation(id: 'op-1'));
+            await storage.updateOperation(existing.copyWith(attempts: 9));
+            await storage.saveCheckpoint(cursorAt('2'));
+            throw StateError('abort');
+          }),
+          throwsStateError,
+        );
+
+        expect(await storage.getOperation('op-1'), isNull);
+        expect((await storage.getOperation('existing'))!.attempts, 0);
+        expect(
+          (await storage.getCheckpoint(
+            accountId: 'account-a',
+            entityName: 'customers',
+          ))!
+              .cursor,
+          '1',
+        );
+      });
+
+      test('a failing nested transaction rolls back only itself', () async {
+        await storage.runInTransaction(() async {
+          await storage.insertOperation(buildTestOperation(id: 'outer'));
+          try {
+            await storage.runInTransaction<void>(() async {
+              await storage.insertOperation(buildTestOperation(id: 'inner'));
+              throw StateError('inner failed');
+            });
+          } on StateError {
+            // Handled by the outer transaction.
+          }
+        });
+
+        expect(await storage.getOperation('outer'), isNotNull);
+        expect(await storage.getOperation('inner'), isNull);
+      });
+
+      test('outside readers never observe uncommitted writes', () async {
+        final gate = Completer<void>();
+        final transaction = storage.runInTransaction<void>(() async {
+          await storage.insertOperation(buildTestOperation(id: 'op-1'));
+          await gate.future;
+          throw StateError('abort');
+        });
+        await pumpEventQueue();
+
+        final outside = storage.getOperation('op-1');
+        gate.complete();
+
+        await expectLater(transaction, throwsStateError);
+        expect(await outside, isNull);
+      });
+    });
+
     group('checkpoints', () {
       SyncCheckpoint checkpoint(String account, String entity, String cursor) =>
           SyncCheckpoint(

@@ -1,3 +1,11 @@
+## 0.3.0-dev.1
+
+- **Breaking:** `SyncStorage.runInTransaction` added (atomic, nestable,
+  joins the caller's database transaction where supported).
+- `OperationQueue.enqueue` runs in a storage transaction, enabling the
+  transactional outbox; the in-process enqueue lock was removed.
+- `SyncStorageException` for backend failures.
+
 ## 0.2.0-dev.1
 
 - `SyncEngine`: lease-based delivery with bounded concurrency, dependency

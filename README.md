@@ -16,7 +16,7 @@ current database, HTTP client and state management.
 | --- | --- | --- |
 | [`syncflow`](packages/syncflow) | Pure Dart core: operation model, state machine, queue, contracts | In progress |
 | [`syncflow_test`](packages/syncflow_test) | In-memory storage, fake clock, ID generator, storage contract tests | In progress |
-| `syncflow_drift` | Drift persistence and transactional outbox | Planned |
+| [`syncflow_drift`](packages/syncflow_drift) | Drift persistence and transactional outbox | In progress |
 | `syncflow_dio` | Dio REST transport | Planned |
 | `syncflow_flutter` | Lifecycle and connectivity triggers | Planned |
 | `syncflow_inspector` | Developer diagnostics UI | Planned |
@@ -32,7 +32,7 @@ analysis and tests.
 - [x] **Step 2: Execution engine.** Retry policy with jitter, error
   classification, executor (lease → send → classify → persist), crash
   recovery, fake transport.
-- [ ] **Step 3: Drift adapter.** Tables, indexes, migrations, atomic leases,
+- [x] **Step 3: Drift adapter.** Tables, indexes, migrations, atomic leases,
   shared-transaction outbox; must pass the storage contract suite.
 - [ ] **Step 4: Dio adapter.** Request mapping, idempotency headers,
   `Retry-After`, auth hooks, status classification.
@@ -54,12 +54,14 @@ dart analyze --fatal-infos       # static analysis
 dart format .                    # format
 (cd packages/syncflow && dart test)
 (cd packages/syncflow_test && dart test)
+(cd packages/syncflow_drift && dart test)   # needs SQLite (libsqlite3-dev on Linux)
 ```
 
 ## Documentation
 
 - [Operation lifecycle and initial contracts](docs/architecture/operation-lifecycle.md)
 - [Execution engine](docs/architecture/execution-engine.md)
+- [Drift adapter and transactional outbox](packages/syncflow_drift/README.md)
 - [Architecture decision records](docs/architecture/decisions/)
 
 ## License

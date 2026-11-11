@@ -58,7 +58,7 @@ that arrive during a run share a single follow-up run.
 `OperationQueue` (with `serializeEntityOperations: true`, the default) makes
 each new operation depend on the previous unfinished operation for the same
 entity. Together with dependency gating, this means an update is never sent
-before the create it follows. Enqueues are serialized within a queue instance,
+before the create it follows. Each enqueue runs in one storage transaction,
 so concurrent mutations of one entity form a chain.
 
 ## Crash recovery
