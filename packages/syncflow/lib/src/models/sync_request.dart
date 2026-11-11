@@ -65,6 +65,30 @@ final class SyncRequest {
   /// Operation this request delivers, if any.
   final String? operationId;
 
+  /// Returns a copy with the given fields replaced.
+  SyncRequest copyWith({
+    SyncHttpMethod? method,
+    String? path,
+    String? accountId,
+    Map<String, String>? headers,
+    Map<String, Object?>? queryParameters,
+    Object? body,
+    Duration? timeout,
+    String? idempotencyKey,
+    String? operationId,
+  }) =>
+      SyncRequest(
+        method: method ?? this.method,
+        path: path ?? this.path,
+        accountId: accountId ?? this.accountId,
+        headers: headers ?? this.headers,
+        queryParameters: queryParameters ?? this.queryParameters,
+        body: body ?? this.body,
+        timeout: timeout ?? this.timeout,
+        idempotencyKey: idempotencyKey ?? this.idempotencyKey,
+        operationId: operationId ?? this.operationId,
+      );
+
   @override
   String toString() => 'SyncRequest(${method.name.toUpperCase()} $path'
       '${operationId == null ? '' : ', operation: $operationId'})';

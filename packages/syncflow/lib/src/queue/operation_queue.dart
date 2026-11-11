@@ -13,10 +13,15 @@ import 'sync_mutation.dart';
 /// stable ID and idempotency key.
 final class OperationQueue {
   /// Creates a queue over [storage].
+  ///
+  /// When [serializeEntityOperations] is `true` (the default), each new
+  /// operation automatically depends on the previous unfinished operation for
+  /// the same entity, so an update can never overtake the create before it.
   OperationQueue({
     required SyncStorage storage,
     Clock clock = const SystemClock(),
     IdGenerator idGenerator = const UuidV4Generator(),
+    this.serializeEntityOperations = true,
   })  : _storage = storage,
         _clock = clock,
         _ids = idGenerator;
@@ -24,6 +29,13 @@ final class OperationQueue {
   final SyncStorage _storage;
   final Clock _clock;
   final IdGenerator _ids;
+
+  /// Whether operations on the same entity are delivered strictly in order.
+  final bool serializeEntityOperations;
+
+  // Tail of the enqueue chain: enqueues run one at a time so that two
+  // concurrent mutations of one entity cannot pick the same predecessor.
+  Future<void> _tail = Future.value();
 
   /// Durably records [mutation] for [accountId] and returns the new operation.
   ///
@@ -37,7 +49,26 @@ final class OperationQueue {
   Future<SyncOperation> enqueue(
     SyncMutation mutation, {
     required String accountId,
-  }) async {
+  }) {
+    final result = _tail.then((_) => _enqueue(mutation, accountId));
+    _tail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<SyncOperation> _enqueue(
+      SyncMutation mutation, String accountId) async {
+    final dependencies = [...mutation.dependencies];
+    if (serializeEntityOperations) {
+      final previous = await _storage.findLatestActiveOperation(
+        accountId: accountId,
+        entityName: mutation.entity,
+        entityId: mutation.id,
+      );
+      if (previous != null && !dependencies.contains(previous.id)) {
+        dependencies.add(previous.id);
+      }
+    }
+
     for (final dependencyId in mutation.dependencies) {
       final dependency = await _storage.getOperation(dependencyId);
       if (dependency == null) {
@@ -63,7 +94,7 @@ final class OperationQueue {
       payload: mutation.data,
       idempotencyKey: mutation.idempotencyKey ?? _ids.next(),
       baseVersion: mutation.baseVersion,
-      dependencies: mutation.dependencies,
+      dependencies: dependencies,
       schemaVersion: mutation.schemaVersion,
       createdAt: _clock.now(),
     );

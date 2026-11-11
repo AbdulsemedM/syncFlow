@@ -62,6 +62,18 @@ abstract interface class SyncStorage {
     required int limit,
   });
 
+  /// Returns the most recently created non-terminal operation (any status
+  /// except [SyncOperationStatus.acknowledged] and
+  /// [SyncOperationStatus.cancelled]) for the given entity, or `null`.
+  ///
+  /// "Most recent" uses the same ordering as [getEligibleOperations]. Used to
+  /// order successive mutations of one entity.
+  Future<SyncOperation?> findLatestActiveOperation({
+    required String accountId,
+    required String entityName,
+    required String entityId,
+  });
+
   /// Replaces the stored operation with [operation] and returns the stored
   /// result, whose revision is `operation.revision + 1`.
   ///

@@ -245,6 +245,76 @@ void runSyncStorageContractTests(
       });
     });
 
+    group('findLatestActiveOperation', () {
+      Future<String?> latest({
+        String accountId = 'account-a',
+        String entityId = 'c-1',
+      }) async =>
+          (await storage.findLatestActiveOperation(
+            accountId: accountId,
+            entityName: 'customers',
+            entityId: entityId,
+          ))
+              ?.id;
+
+      test('returns the newest non-terminal operation of the entity', () async {
+        await storage.insertOperations([
+          buildTestOperation(id: 'old', entityId: 'c-1', createdAt: t0),
+          buildTestOperation(
+            id: 'newer-same-time-b',
+            entityId: 'c-1',
+            status: SyncOperationStatus.rejected,
+            createdAt: t0.add(const Duration(seconds: 1)),
+          ),
+          buildTestOperation(
+            id: 'newer-same-time-a',
+            entityId: 'c-1',
+            status: SyncOperationStatus.retryScheduled,
+            createdAt: t0.add(const Duration(seconds: 1)),
+          ),
+          buildTestOperation(
+            id: 'acked',
+            entityId: 'c-1',
+            status: SyncOperationStatus.acknowledged,
+            createdAt: t0.add(const Duration(seconds: 5)),
+          ),
+          buildTestOperation(
+            id: 'cancelled',
+            entityId: 'c-1',
+            status: SyncOperationStatus.cancelled,
+            createdAt: t0.add(const Duration(seconds: 6)),
+          ),
+          buildTestOperation(
+            id: 'other-entity',
+            entityId: 'c-2',
+            createdAt: t0.add(const Duration(seconds: 9)),
+          ),
+          buildTestOperation(
+            id: 'other-account',
+            accountId: 'account-b',
+            entityId: 'c-1',
+            createdAt: t0.add(const Duration(seconds: 9)),
+          ),
+        ]);
+
+        expect(await latest(), 'newer-same-time-a');
+        expect(await latest(entityId: 'c-2'), 'other-entity');
+        expect(await latest(accountId: 'account-b'), 'other-account');
+        expect(await latest(entityId: 'c-3'), isNull);
+      });
+
+      test('ignores entities whose operations are all terminal', () async {
+        await storage.insertOperations([
+          buildTestOperation(
+            id: 'acked',
+            entityId: 'c-1',
+            status: SyncOperationStatus.acknowledged,
+          ),
+        ]);
+        expect(await latest(), isNull);
+      });
+    });
+
     group('leases', () {
       final expiry = t0.add(const Duration(minutes: 5));
 

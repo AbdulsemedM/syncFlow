@@ -7,9 +7,28 @@ Future<void> main() async {
   final storage = InMemorySyncStorage();
   await storage.initialize();
 
-  final queue = OperationQueue(storage: storage);
+  // A fake backend: the first request fails, the retry succeeds.
+  final transport = FakeSyncTransport()..enqueueStatus(503);
 
-  final operation = await queue.enqueue(
+  final queue = OperationQueue(storage: storage);
+  final engine = SyncEngine(
+    storage: storage,
+    transport: transport,
+    activeAccount: () => 'account-a',
+    requestBuilder: (operation) => SyncRequest(
+      method: SyncHttpMethod.post,
+      path: '/${operation.entityName}',
+      accountId: operation.accountId,
+      body: operation.payload,
+    ),
+    retryPolicy: ExponentialBackoffRetryPolicy(
+      baseDelay: const Duration(milliseconds: 100),
+    ),
+  );
+  engine.events.listen((event) => print('event: ${event.runtimeType}'));
+  await engine.initialize();
+
+  await queue.enqueue(
     SyncMutation.create(
       entity: 'customers',
       id: 'customer-123',
@@ -18,8 +37,11 @@ Future<void> main() async {
     accountId: 'account-a',
   );
 
-  final ready = await queue.eligible(accountId: 'account-a');
-  print('${operation.id} queued; ${ready.length} operation(s) ready');
+  print(await engine.syncNow()); // retry scheduled
+  await Future<void>.delayed(const Duration(milliseconds: 150));
+  print(await engine.syncNow()); // acknowledged
 
+  await engine.close();
+  await transport.close();
   await storage.close();
 }

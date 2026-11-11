@@ -7,6 +7,13 @@ library;
 
 export 'src/adapters/sync_storage.dart';
 export 'src/adapters/sync_transport.dart';
+export 'src/engine/sync_engine.dart';
+export 'src/engine/sync_run_result.dart';
+export 'src/events/sync_event.dart';
+export 'src/executor/delivery_outcome.dart';
+export 'src/executor/operation_executor.dart'
+    show ExecutionResult, SyncRequestBuilder;
+export 'src/executor/response_classifier.dart';
 export 'src/models/exceptions.dart';
 export 'src/models/sync_checkpoint.dart';
 export 'src/models/sync_error.dart';
@@ -17,5 +24,7 @@ export 'src/queue/operation_queue.dart';
 export 'src/queue/operation_status.dart';
 export 'src/queue/operation_type.dart';
 export 'src/queue/sync_mutation.dart';
+export 'src/scheduler/retry_policy.dart';
 export 'src/utils/clock.dart';
 export 'src/utils/id_generator.dart';
+export 'src/utils/retry_after.dart';

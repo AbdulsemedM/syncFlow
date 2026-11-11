@@ -85,6 +85,35 @@ final class InMemorySyncStorage implements SyncStorage {
   }
 
   @override
+  Future<SyncOperation?> findLatestActiveOperation({
+    required String accountId,
+    required String entityName,
+    required String entityId,
+  }) async {
+    _ensureOpen();
+    (SyncOperation, int)? latest;
+    for (final stored in _operations.values) {
+      final operation = _decode(stored.json);
+      if (operation.accountId != accountId ||
+          operation.entityName != entityName ||
+          operation.entityId != entityId ||
+          operation.status.isTerminal) {
+        continue;
+      }
+      if (latest == null) {
+        latest = (operation, stored.sequence);
+        continue;
+      }
+      final (current, sequence) = latest;
+      final byCreation = operation.createdAt.compareTo(current.createdAt);
+      if (byCreation > 0 || (byCreation == 0 && stored.sequence > sequence)) {
+        latest = (operation, stored.sequence);
+      }
+    }
+    return latest?.$1;
+  }
+
+  @override
   Future<SyncOperation> updateOperation(SyncOperation operation) async {
     _ensureOpen();
     final current = _current(operation.id);

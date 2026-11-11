@@ -13,8 +13,14 @@ defines:
   queries.
 - `SyncStorage` and `SyncTransport`: the contracts that adapter packages
   implement.
+- `SyncEngine`: delivers operations with leases, retries (exponential backoff
+  with jitter and `Retry-After`), dependency ordering, account isolation,
+  authentication pause and crash recovery. See
+  [execution-engine.md](../../docs/architecture/execution-engine.md).
 
-> **Status:** `0.1.0-dev`. The execution engine is not implemented yet.
+> **Status:** `0.2.0-dev`. There are no production storage or transport
+> adapters yet. A full engine example is in
+> [example/syncflow_example.dart](example/syncflow_example.dart).
 
 ## Example
 

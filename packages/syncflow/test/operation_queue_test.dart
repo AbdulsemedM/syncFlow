@@ -120,6 +120,90 @@ void main() {
     });
   });
 
+  group('entity ordering', () {
+    SyncMutation rename(String id, String name) => SyncMutation.update(
+          entity: 'customers',
+          id: id,
+          data: {'name': name},
+        );
+
+    test('a mutation depends on the previous unfinished one for the entity',
+        () async {
+      final create = await queue.enqueue(
+        createCustomer('c-1'),
+        accountId: 'account-a',
+      );
+      final update = await queue.enqueue(
+        rename('c-1', 'B'),
+        accountId: 'account-a',
+      );
+      final other = await queue.enqueue(
+        createCustomer('c-2'),
+        accountId: 'account-a',
+      );
+
+      expect(create.dependencies, isEmpty);
+      expect(update.dependencies, [create.id]);
+      expect(other.dependencies, isEmpty);
+    });
+
+    test('finished predecessors are not dependencies', () async {
+      final create = await queue.enqueue(
+        createCustomer('c-1'),
+        accountId: 'account-a',
+      );
+      await queue.cancel(create.id);
+
+      final update = await queue.enqueue(
+        rename('c-1', 'B'),
+        accountId: 'account-a',
+      );
+
+      expect(update.dependencies, isEmpty);
+    });
+
+    test('concurrent enqueues of one entity form a chain', () async {
+      final operations = await Future.wait([
+        for (var i = 0; i < 3; i++)
+          queue.enqueue(rename('c-1', 'v$i'), accountId: 'account-a'),
+      ]);
+
+      expect(operations[0].dependencies, isEmpty);
+      expect(operations[1].dependencies, [operations[0].id]);
+      expect(operations[2].dependencies, [operations[1].id]);
+    });
+
+    test('a failed enqueue does not block later ones', () async {
+      await expectLater(
+        queue.enqueue(
+          createCustomer('c-1', dependsOn: ['missing']),
+          accountId: 'account-a',
+        ),
+        throwsA(isA<InvalidDependencyException>()),
+      );
+      final next = await queue.enqueue(
+        createCustomer('c-1'),
+        accountId: 'account-a',
+      );
+      expect(next.dependencies, isEmpty);
+    });
+
+    test('can be disabled', () async {
+      final unordered = OperationQueue(
+        storage: storage,
+        clock: clock,
+        serializeEntityOperations: false,
+      );
+      await unordered.enqueue(createCustomer('c-1'), accountId: 'account-a');
+      final update = await unordered.enqueue(
+        rename('c-1', 'B'),
+        accountId: 'account-a',
+      );
+
+      expect(update.dependencies, isEmpty);
+    });
+  });
+
   group('eligible', () {
     test('returns operations in FIFO order', () async {
       final ids = <String>[];

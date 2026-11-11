@@ -29,7 +29,7 @@ analysis and tests.
 - [x] **Step 1: Core contracts.** Workspace, operation model, state machine,
   `SyncStorage`/`SyncTransport` contracts, in-memory queue, storage contract
   test suite.
-- [ ] **Step 2: Execution engine.** Retry policy with jitter, error
+- [x] **Step 2: Execution engine.** Retry policy with jitter, error
   classification, executor (lease → send → classify → persist), crash
   recovery, fake transport.
 - [ ] **Step 3: Drift adapter.** Tables, indexes, migrations, atomic leases,
@@ -59,6 +59,7 @@ dart format .                    # format
 ## Documentation
 
 - [Operation lifecycle and initial contracts](docs/architecture/operation-lifecycle.md)
+- [Execution engine](docs/architecture/execution-engine.md)
 - [Architecture decision records](docs/architecture/decisions/)
 
 ## License
