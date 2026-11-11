@@ -1,0 +1,13 @@
+name: syncflow_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+
+# Packages are added here as they are implemented (see README "Build plan").
+workspace:
+  - packages/syncflow
+  - packages/syncflow_test
+
+dev_dependencies:
+  lints: ^5.1.0
