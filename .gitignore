@@ -4,3 +4,4 @@ coverage/
 pubspec.lock
 *.iml
 .idea/
+.claude/settings.local.json
