@@ -1,0 +1,18 @@
+name: syncflow_dio
+description: >-
+  Dio REST transport for SyncFlow: idempotency headers, per-account
+  authentication with token refresh, timeouts, cancellation and safe error
+  mapping.
+version: 0.3.0-dev.1
+
+environment:
+  sdk: ^3.6.0
+
+resolution: workspace
+
+dependencies:
+  syncflow: ^0.3.0-dev.1
+  dio: ^5.11.1
+dev_dependencies:
+  test: ^1.25.0
+  syncflow_test: ^0.3.0-dev.1

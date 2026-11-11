@@ -9,6 +9,7 @@ workspace:
   - packages/syncflow
   - packages/syncflow_test
   - packages/syncflow_drift
+  - packages/syncflow_dio
 
 dev_dependencies:
   lints: ^5.1.0
