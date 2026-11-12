@@ -15,6 +15,7 @@ import 'package:syncflow/syncflow.dart';
 final class InMemorySyncStorage implements SyncStorage {
   final Map<String, _StoredOperation> _operations = {};
   final Map<(String, String), SyncCheckpoint> _checkpoints = {};
+  final Map<(String, String, String), String> _idMappings = {};
   int _nextSequence = 0;
   bool _initialized = false;
   bool _closed = false;
@@ -133,6 +134,35 @@ final class InMemorySyncStorage implements SyncStorage {
         }
         return latest?.$1;
       });
+
+  @override
+  Future<List<SyncOperation>> findDependentOperations(String operationId) =>
+      _guard(() async {
+        final dependents = <(SyncOperation, int)>[
+          for (final stored in _operations.values)
+            if (_decode(stored.json) case final operation
+                when operation.dependencies.contains(operationId))
+              (operation, stored.sequence),
+        ]..sort((a, b) {
+            final byCreation = a.$1.createdAt.compareTo(b.$1.createdAt);
+            return byCreation != 0 ? byCreation : a.$2.compareTo(b.$2);
+          });
+        return [for (final (operation, _) in dependents) operation];
+      });
+
+  @override
+  Future<void> saveIdMapping(SyncIdMapping mapping) => _guard(() async {
+        _idMappings[(mapping.accountId, mapping.entityName, mapping.localId)] =
+            mapping.serverId;
+      });
+
+  @override
+  Future<String?> resolveServerId({
+    required String accountId,
+    required String entityName,
+    required String localId,
+  }) =>
+      _guard(() async => _idMappings[(accountId, entityName, localId)]);
 
   @override
   Future<SyncOperation> updateOperation(SyncOperation operation) =>
@@ -255,6 +285,7 @@ final class InMemorySyncStorage implements SyncStorage {
     _ensureOpen();
     final operations = Map.of(_operations);
     final checkpoints = Map.of(_checkpoints);
+    final idMappings = Map.of(_idMappings);
     final nextSequence = _nextSequence;
     try {
       return await action();
@@ -265,6 +296,9 @@ final class InMemorySyncStorage implements SyncStorage {
       _checkpoints
         ..clear()
         ..addAll(checkpoints);
+      _idMappings
+        ..clear()
+        ..addAll(idMappings);
       _nextSequence = nextSequence;
       rethrow;
     }

@@ -195,6 +195,58 @@ final class DriftSyncStorage implements SyncStorage {
       });
 
   @override
+  Future<List<SyncOperation>> findDependentOperations(String operationId) =>
+      _run(() async {
+        // json_each matches whole array elements, so "op-1" never matches
+        // "op-10".
+        final rows = await _db.customSelect(
+          'SELECT * FROM $operationsTable WHERE EXISTS ('
+          'SELECT 1 FROM json_each($operationsTable.dependencies) '
+          'WHERE json_each.value = ?) '
+          'ORDER BY created_at, seq',
+          variables: [Variable<String>(operationId)],
+        ).get();
+        return [for (final row in rows) _decode(row)];
+      });
+
+  @override
+  Future<void> saveIdMapping(SyncIdMapping mapping) => _run(() async {
+        await _db.customInsert(
+          'INSERT INTO $idMappingsTable '
+          '(account_id, entity_name, local_id, server_id, created_at) '
+          'VALUES (?, ?, ?, ?, ?) '
+          'ON CONFLICT (account_id, entity_name, local_id) DO UPDATE SET '
+          'server_id = excluded.server_id, created_at = excluded.created_at',
+          variables: [
+            Variable<String>(mapping.accountId),
+            Variable<String>(mapping.entityName),
+            Variable<String>(mapping.localId),
+            Variable<String>(mapping.serverId),
+            Variable<int>(_micros(mapping.createdAt)),
+          ],
+        );
+      });
+
+  @override
+  Future<String?> resolveServerId({
+    required String accountId,
+    required String entityName,
+    required String localId,
+  }) =>
+      _run(() async {
+        final row = await _db.customSelect(
+          'SELECT server_id FROM $idMappingsTable '
+          'WHERE account_id = ? AND entity_name = ? AND local_id = ?',
+          variables: [
+            Variable<String>(accountId),
+            Variable<String>(entityName),
+            Variable<String>(localId),
+          ],
+        ).getSingleOrNull();
+        return row?.read<String>('server_id');
+      });
+
+  @override
   Future<SyncOperation> updateOperation(SyncOperation operation) =>
       _run(() async {
         final stored = await _compareAndSet(

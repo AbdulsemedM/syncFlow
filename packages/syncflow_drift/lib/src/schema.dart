@@ -11,6 +11,9 @@ const operationsTable = 'syncflow_operations';
 /// Table holding pull cursors per account and entity.
 const checkpointsTable = 'syncflow_checkpoints';
 
+/// Table mapping local entity IDs to server-assigned IDs.
+const idMappingsTable = 'syncflow_id_mappings';
+
 /// Metadata key under which the schema version is stored.
 const schemaVersionKey = 'schema_version';
 
@@ -72,6 +75,18 @@ CREATE TABLE $checkpointsTable (
   cursor TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (account_id, entity_name)
+)''',
+  ],
+  // 1 -> 2: server-assigned ID mappings (temporary-ID rewriting).
+  [
+    '''
+CREATE TABLE $idMappingsTable (
+  account_id TEXT NOT NULL,
+  entity_name TEXT NOT NULL,
+  local_id TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (account_id, entity_name, local_id)
 )''',
   ],
 ];

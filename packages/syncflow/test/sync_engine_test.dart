@@ -499,16 +499,163 @@ void main() {
       expect(sentOperationIds(), [customer.id, customer.id, account.id]);
     });
 
-    test('a rejected dependency keeps dependents blocked', () async {
+    test('a rejected dependency rejects its dependents, transitively',
+        () async {
       final customer = await enqueue('c-1');
-      await enqueue('acc-1', entity: 'accounts', dependsOn: [customer.id]);
+      final account = await enqueue(
+        'acc-1',
+        entity: 'accounts',
+        dependsOn: [customer.id],
+      );
+      final transaction = await enqueue(
+        'tx-1',
+        entity: 'transactions',
+        dependsOn: [account.id],
+      );
+      final unrelated = await enqueue('c-2');
+      transport.enqueueStatus(422);
+
+      final result = await engine.syncNow();
+      await pumpEventQueue();
+
+      expect(sentOperationIds(), [customer.id, unrelated.id]);
+      expect(result.rejected, 3);
+      expect(result.acknowledged, 1);
+      expect(result.blocked, 0);
+      for (final (dependent, cause) in [
+        (account, customer),
+        (transaction, account),
+      ]) {
+        final stored = (await storage.getOperation(dependent.id))!;
+        expect(stored.status, SyncOperationStatus.rejected);
+        expect(stored.lastError!.category, SyncErrorCategory.dependency);
+        expect(stored.lastError!.message, contains(cause.id));
+        expect(stored.attempts, 0, reason: 'never sent');
+      }
+      expect(
+        events.whereType<OperationRejected>().map((e) => e.operation.id),
+        [customer.id, account.id, transaction.id],
+      );
+    });
+
+    test('a retry-scheduled dependent is rejected too', () async {
+      final customer = await enqueue('c-1');
+      final update = await queue.enqueue(
+        SyncMutation.update(
+          entity: 'customers',
+          id: 'c-1',
+          data: const {'name': 'Renamed'},
+        ),
+        accountId: 'account-a',
+      );
+      // Simulate the update having been retried before the create failed.
+      final stored = (await storage.getOperation(update.id))!;
+      final leased = (await storage.acquireLease(
+        operationId: stored.id,
+        workerId: 'w',
+        now: clock.now(),
+        expiresAt: clock.now().add(const Duration(minutes: 1)),
+      ))!;
+      final sending = await storage.updateOperation(
+        leased.transitionTo(SyncOperationStatus.sending, at: clock.now()),
+      );
+      await storage.updateOperation(
+        sending.transitionTo(SyncOperationStatus.retryScheduled,
+            at: clock.now()),
+      );
       transport.enqueueStatus(422);
 
       await engine.syncNow();
-      final later = await engine.syncNow();
 
       expect(sentOperationIds(), [customer.id]);
-      expect(later.blocked, 1);
+      expect(
+        (await storage.getOperation(update.id))!.status,
+        SyncOperationStatus.rejected,
+      );
+    });
+
+    test('a cancelled dependency no longer blocks its dependents', () async {
+      final customer = await enqueue('c-1');
+      final account = await enqueue(
+        'acc-1',
+        entity: 'accounts',
+        dependsOn: [customer.id],
+      );
+      await queue.cancel(customer.id);
+
+      final result = await engine.syncNow();
+
+      expect(sentOperationIds(), [account.id]);
+      expect(result.acknowledged, 1);
+    });
+
+    test('retry re-queues a fixed rejection with its rejected dependents',
+        () async {
+      final customer = await enqueue('c-1');
+      final account = await enqueue(
+        'acc-1',
+        entity: 'accounts',
+        dependsOn: [customer.id],
+      );
+      final transaction = await enqueue(
+        'tx-1',
+        entity: 'transactions',
+        dependsOn: [account.id],
+      );
+      transport.enqueueStatus(422);
+      await engine.syncNow();
+
+      final requeued = await queue.retry(customer.id);
+      final result = await engine.syncNow();
+
+      expect(
+        [for (final op in requeued) op.id],
+        [customer.id, account.id, transaction.id],
+      );
+      expect(requeued.every((op) => op.attempts == 0), isTrue);
+      expect(requeued.every((op) => op.lastError == null), isTrue);
+      expect(result.acknowledged, 3);
+      expect(
+        sentOperationIds(),
+        [customer.id, customer.id, account.id, transaction.id],
+      );
+      expect(
+        transport.requests[1].idempotencyKey,
+        customer.idempotencyKey,
+        reason: 'retry keeps the idempotency key',
+      );
+    });
+
+    test('retry without dependents leaves them rejected', () async {
+      final customer = await enqueue('c-1');
+      final account = await enqueue(
+        'acc-1',
+        entity: 'accounts',
+        dependsOn: [customer.id],
+      );
+      transport.enqueueStatus(422);
+      await engine.syncNow();
+
+      final requeued = await queue.retry(customer.id, includeDependents: false);
+
+      expect([for (final op in requeued) op.id], [customer.id]);
+      expect(
+        (await storage.getOperation(account.id))!.status,
+        SyncOperationStatus.rejected,
+      );
+    });
+
+    test('retry refuses operations that are not rejected', () async {
+      final customer = await enqueue('c-1');
+
+      await expectLater(
+        queue.retry(customer.id),
+        throwsA(isA<InvalidStateTransitionException>()),
+      );
+      await expectLater(
+        queue.retry('missing'),
+        throwsA(isA<OperationNotFoundException>()),
+      );
     });
 
     test('mutations of one entity are delivered in order', () async {

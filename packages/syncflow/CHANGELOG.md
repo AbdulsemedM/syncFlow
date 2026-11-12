@@ -1,3 +1,20 @@
+## 0.4.0-dev.1
+
+- `SyncEntity`, `RestEndpoint` and `SyncEntityRegistry` for entity registration.
+- `RestRequestBuilder`: REST mapping per operation type, `{id}` path templates,
+  `If-Match` from the base version, per-entity request builder override.
+- Temporary-ID rewriting: acknowledged creates store a `SyncIdMapping` in the
+  same transaction as the acknowledgement; paths and declared references are
+  resolved at send time. New `EntityIdAssigned` event.
+- Dependency failure propagation: dependents of a rejected operation are
+  rejected (category `dependency`), transitively. Cancelled dependencies no
+  longer block. New transitions `pending/retryScheduled → rejected`.
+- `OperationQueue.retry` re-queues a rejected operation and the dependents
+  rejected because of it.
+- **Breaking:** `SyncStorage.findDependentOperations`, `saveIdMapping` and
+  `resolveServerId` added; `SyncEngine` accepts `entities`.
+- `UnknownEntityException`, `UnsupportedOperationTypeException`.
+
 ## 0.3.0-dev.1
 
 - **Breaking:** `SyncStorage.runInTransaction` added (atomic, nestable,

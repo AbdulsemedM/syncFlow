@@ -114,6 +114,38 @@ final class InvalidDependencyException extends SyncFlowException {
   String get name => 'InvalidDependencyException';
 }
 
+/// Thrown when an operation refers to an entity that was never registered.
+final class UnknownEntityException extends SyncFlowException {
+  /// Creates an exception for [entityName].
+  UnknownEntityException(this.entityName)
+      : super('Entity "$entityName" is not registered.');
+
+  /// The unregistered entity name.
+  final String entityName;
+
+  @override
+  String get name => 'UnknownEntityException';
+}
+
+/// Thrown when an entity's endpoint does not support an operation type, for
+/// example a delete on an entity configured without a delete path.
+final class UnsupportedOperationTypeException extends SyncFlowException {
+  /// Creates an exception for [operationType] on [entityName].
+  UnsupportedOperationTypeException({
+    required this.entityName,
+    required this.operationType,
+  }) : super('Entity "$entityName" has no endpoint for $operationType.');
+
+  /// The entity whose endpoint is missing.
+  final String entityName;
+
+  /// The unsupported operation type name.
+  final String operationType;
+
+  @override
+  String get name => 'UnsupportedOperationTypeException';
+}
+
 /// Thrown when the storage backend fails (I/O errors, constraint violations,
 /// unsupported schema versions, ...).
 final class SyncStorageException extends SyncFlowException {

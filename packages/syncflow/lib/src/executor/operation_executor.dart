@@ -2,12 +2,16 @@ import 'dart:async';
 
 import '../adapters/sync_storage.dart';
 import '../adapters/sync_transport.dart';
+import '../entities/sync_entity.dart';
 import '../events/sync_event.dart';
 import '../models/exceptions.dart';
 import '../models/sync_error.dart';
+import '../models/sync_id_mapping.dart';
 import '../models/sync_request.dart';
+import '../models/sync_response.dart';
 import '../queue/operation.dart';
 import '../queue/operation_status.dart';
+import '../queue/operation_type.dart';
 import '../scheduler/retry_policy.dart';
 import '../utils/clock.dart';
 import 'delivery_outcome.dart';
@@ -64,7 +68,9 @@ final class OperationExecutor {
     required String workerId,
     required Duration leaseDuration,
     required void Function(SyncEvent event) emit,
-  })  : _storage = storage,
+    SyncEntityRegistry? entities,
+  })  : _entities = entities,
+        _storage = storage,
         _transport = transport,
         _requestBuilder = requestBuilder,
         _retryPolicy = retryPolicy,
@@ -83,6 +89,7 @@ final class OperationExecutor {
   final String _workerId;
   final Duration _leaseDuration;
   final void Function(SyncEvent event) _emit;
+  final SyncEntityRegistry? _entities;
 
   /// Executes the operation with [operationId] if it can still be claimed.
   Future<ExecutionResult> execute(String operationId) async {
@@ -173,17 +180,19 @@ final class OperationExecutor {
     final now = _clock.now();
     switch (outcome) {
       case DeliverySucceeded(:final response):
-        return _persist(
-          sending
-              .transitionTo(SyncOperationStatus.acknowledged, at: now)
-              .copyWith(clearLastError: true, clearNextAttemptAt: true),
-          ExecutionResult.acknowledged,
-          (stored) => OperationAcknowledged(
-            operation: stored,
-            response: response,
-            at: now,
-          ),
-        );
+        final acknowledged = sending
+            .transitionTo(SyncOperationStatus.acknowledged, at: now)
+            .copyWith(clearLastError: true, clearNextAttemptAt: true);
+        SyncEvent ackEvent(SyncOperation stored) => OperationAcknowledged(
+              operation: stored,
+              response: response,
+              at: now,
+            );
+        final mapping = _idMappingFor(sending, response, now);
+        if (mapping == null) {
+          return _persist(acknowledged, ExecutionResult.acknowledged, ackEvent);
+        }
+        return _persistWithMapping(acknowledged, mapping, ackEvent);
 
       case DeliveryRetryable(:final error, :final retryAfter):
         final delay = _retryPolicy.delayFor(
@@ -264,6 +273,62 @@ final class OperationExecutor {
     }
     _emit(event(stored));
     return result;
+  }
+
+  // A create acknowledged with a server ID different from the local one.
+  SyncIdMapping? _idMappingFor(
+    SyncOperation operation,
+    SyncResponse response,
+    DateTime now,
+  ) {
+    if (operation.operationType != SyncOperationType.create) return null;
+    final extract = _entities?[operation.entityName]?.serverIdFrom;
+    final serverId = extract?.call(response);
+    if (serverId == null ||
+        serverId.isEmpty ||
+        serverId == operation.entityId) {
+      return null;
+    }
+    return SyncIdMapping(
+      accountId: operation.accountId,
+      entityName: operation.entityName,
+      localId: operation.entityId,
+      serverId: serverId,
+      createdAt: now,
+    );
+  }
+
+  // The acknowledgement and the ID mapping are committed together: a crash
+  // can never leave an acknowledged create whose dependents would be sent to
+  // the temporary ID.
+  Future<ExecutionResult> _persistWithMapping(
+    SyncOperation acknowledged,
+    SyncIdMapping mapping,
+    SyncEvent Function(SyncOperation stored) ackEvent,
+  ) async {
+    final SyncOperation stored;
+    try {
+      stored = await _storage.runInTransaction(() async {
+        final result = await _storage.updateOperation(acknowledged);
+        await _storage.saveIdMapping(mapping);
+        return result;
+      });
+    } on StaleOperationException {
+      return _leaseLost(acknowledged.id);
+    } on OperationNotFoundException {
+      return _leaseLost(acknowledged.id);
+    }
+    _emit(ackEvent(stored));
+    _emit(
+      EntityIdAssigned(
+        accountId: mapping.accountId,
+        entityName: mapping.entityName,
+        localId: mapping.localId,
+        serverId: mapping.serverId,
+        at: mapping.createdAt,
+      ),
+    );
+    return ExecutionResult.acknowledged;
   }
 
   ExecutionResult _leaseLost(String operationId) {

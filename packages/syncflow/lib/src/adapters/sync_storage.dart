@@ -1,5 +1,6 @@
 import '../models/exceptions.dart';
 import '../models/sync_checkpoint.dart';
+import '../models/sync_id_mapping.dart';
 import '../queue/operation.dart';
 import '../queue/operation_status.dart';
 
@@ -86,6 +87,21 @@ abstract interface class SyncStorage {
     required String accountId,
     required String entityName,
     required String entityId,
+  });
+
+  /// Returns every operation that lists [operationId] among its dependencies,
+  /// in the same order as [getEligibleOperations].
+  Future<List<SyncOperation>> findDependentOperations(String operationId);
+
+  /// Stores [mapping], replacing any mapping for the same account, entity and
+  /// local ID.
+  Future<void> saveIdMapping(SyncIdMapping mapping);
+
+  /// Returns the server ID recorded for [localId], or `null` if none.
+  Future<String?> resolveServerId({
+    required String accountId,
+    required String entityName,
+    required String localId,
   });
 
   /// Replaces the stored operation with [operation] and returns the stored

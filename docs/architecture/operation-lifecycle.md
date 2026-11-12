@@ -6,11 +6,11 @@ core contracts (step 1), including where they refine the original blueprint.
 ## State machine
 
 ```text
-pending ─────────► leased, cancelled
+pending ─────────► leased, cancelled, rejected (prerequisite rejected)
 leased ──────────► sending, pending            (lease released or expired)
 sending ─────────► acknowledged, retryScheduled, conflict, rejected,
                    pending                     (crash recovery)
-retryScheduled ──► pending, leased, cancelled
+retryScheduled ──► pending, leased, cancelled, rejected (prerequisite rejected)
 conflict ────────► pending, cancelled
 rejected ────────► pending, cancelled
 acknowledged     (terminal)
@@ -28,6 +28,7 @@ Transitions are enforced by `SyncOperation.transitionTo`, which throws
 | `sending → pending` | Crash recovery (§11.2) must return an operation whose lease expired mid-request to the queue. The idempotency key is preserved. |
 | `retryScheduled → leased` | A due retry can be claimed atomically in one step instead of two writes (`→ pending → leased`). |
 | `pending`, `retryScheduled`, `rejected → cancelled` | Lets the application discard work it no longer wants (§20.3 "cancel an eligible operation"). In-flight operations cannot be cancelled. |
+| `pending`, `retryScheduled → rejected` | Propagating permanent prerequisite failures (§12.2): a dependent of a rejected operation is rejected with category `dependency` without being sent (step 5). |
 
 ## Lease invariant
 
