@@ -8,7 +8,7 @@ durable operations and delivers them to an existing REST backend with leases,
 retries, dependency ordering and explicit conflict handling. You keep your
 current database, HTTP client and state management.
 
-**Status:** early development (`0.1.0-dev`). Not ready for production use.
+**Status:** early development (`0.7.0-dev`). Not ready for production use.
 
 ## Packages
 
@@ -19,7 +19,7 @@ current database, HTTP client and state management.
 | [`syncflow_drift`](packages/syncflow_drift) | Drift persistence and transactional outbox | In progress |
 | [`syncflow_dio`](packages/syncflow_dio) | Dio REST transport | In progress |
 | [`syncflow_flutter`](packages/syncflow_flutter) | Lifecycle and connectivity triggers, sync status | In progress |
-| `syncflow_inspector` | Developer diagnostics UI | Planned |
+| [`syncflow_inspector`](packages/syncflow_inspector) | Developer diagnostics UI, redacted exports | In progress |
 
 ## Build plan
 
@@ -42,12 +42,13 @@ analysis and tests.
   checkpoints, tombstones.
 - [x] **Step 7: Flutter integration.** Lifecycle, connectivity and retry triggers;
   listenable sync status.
-- [ ] **Step 8: Inspector.**
+- [x] **Step 8: Inspector.** Queue statistics, operation details, conflict
+  inspection, event timeline, safe developer actions, redacted exports.
 
 ## Development
 
-The core packages require Dart 3.6 or later; `syncflow_flutter` requires
-Flutter 3.27 or later. This repository is a
+The core packages require Dart 3.6 or later; `syncflow_flutter` and
+`syncflow_inspector` require Flutter 3.27 or later. This repository is a
 [Pub workspace](https://dart.dev/tools/pub/workspaces).
 
 ```sh
@@ -59,6 +60,7 @@ dart format .                    # format
 (cd packages/syncflow_drift && dart test)   # needs SQLite (libsqlite3-dev on Linux)
 (cd packages/syncflow_dio && dart test)
 (cd packages/syncflow_flutter && flutter test)
+(cd packages/syncflow_inspector && flutter test)
 ```
 
 ## Documentation
@@ -70,6 +72,7 @@ dart format .                    # format
 - [Drift adapter and transactional outbox](packages/syncflow_drift/README.md)
 - [Dio transport](packages/syncflow_dio/README.md)
 - [Flutter integration](packages/syncflow_flutter/README.md)
+- [Inspector](packages/syncflow_inspector/README.md)
 - [Architecture decision records](docs/architecture/decisions/)
 
 ## License

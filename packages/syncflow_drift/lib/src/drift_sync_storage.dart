@@ -212,6 +212,39 @@ final class DriftSyncStorage implements SyncStorage {
       });
 
   @override
+  Future<List<SyncOperation>> listOperations({
+    required String accountId,
+    required int limit,
+    int offset = 0,
+    Set<SyncOperationStatus>? statuses,
+  }) =>
+      _run(() async {
+        if (limit < 1) {
+          throw ArgumentError.value(limit, 'limit', 'must be positive');
+        }
+        if (offset < 0) {
+          throw ArgumentError.value(offset, 'offset', 'must not be negative');
+        }
+        if (statuses != null && statuses.isEmpty) return const [];
+        final statusFilter = statuses == null
+            ? ''
+            : 'AND status IN (${List.filled(statuses.length, '?').join(', ')}) ';
+        final rows = await _db.customSelect(
+          'SELECT * FROM $operationsTable WHERE account_id = ? '
+          '$statusFilter'
+          'ORDER BY created_at DESC, seq DESC LIMIT ? OFFSET ?',
+          variables: [
+            Variable<String>(accountId),
+            for (final status in statuses ?? const <SyncOperationStatus>{})
+              Variable<String>(status.name),
+            Variable<int>(limit),
+            Variable<int>(offset),
+          ],
+        ).get();
+        return [for (final row in rows) _decode(row)];
+      });
+
+  @override
   Future<List<SyncOperation>> findDependentOperations(String operationId) =>
       _run(() async {
         // json_each matches whole array elements, so "op-1" never matches

@@ -2,7 +2,7 @@ name: syncflow_test
 description: >-
   Test utilities for SyncFlow: in-memory storage, a controllable clock,
   deterministic identifiers and a reusable storage contract test suite.
-version: 0.6.0-dev.1
+version: 0.7.0-dev.1
 
 environment:
   sdk: ^3.6.0
@@ -10,5 +10,5 @@ environment:
 resolution: workspace
 
 dependencies:
-  syncflow: ^0.6.0-dev.1
+  syncflow: ^0.7.0-dev.1
   test: ^1.25.0

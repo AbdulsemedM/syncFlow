@@ -629,6 +629,88 @@ void runSyncStorageContractTests(
       });
     });
 
+    group('listOperations', () {
+      Future<void> insertMixed() => storage.insertOperations([
+            buildTestOperation(
+              id: 'late',
+              createdAt: t0.add(const Duration(seconds: 2)),
+            ),
+            buildTestOperation(id: 'tie-first'),
+            buildTestOperation(
+              id: 'rejected',
+              status: SyncOperationStatus.rejected,
+              createdAt: t0.add(const Duration(seconds: 1)),
+            ),
+            buildTestOperation(id: 'tie-second'),
+            buildTestOperation(id: 'other-account', accountId: 'account-b'),
+          ]);
+
+      List<String> ids(List<SyncOperation> operations) =>
+          [for (final operation in operations) operation.id];
+
+      test('returns newest first, ties in reverse insertion order', () async {
+        await insertMixed();
+
+        expect(
+          ids(await storage.listOperations(accountId: 'account-a', limit: 10)),
+          ['late', 'rejected', 'tie-second', 'tie-first'],
+        );
+      });
+
+      test('filters by status', () async {
+        await insertMixed();
+
+        expect(
+          ids(await storage.listOperations(
+            accountId: 'account-a',
+            limit: 10,
+            statuses: {SyncOperationStatus.rejected},
+          )),
+          ['rejected'],
+        );
+        expect(
+          await storage.listOperations(
+            accountId: 'account-a',
+            limit: 10,
+            statuses: const {},
+          ),
+          isEmpty,
+        );
+      });
+
+      test('pages with limit and offset', () async {
+        await insertMixed();
+
+        expect(
+          ids(await storage.listOperations(
+            accountId: 'account-a',
+            limit: 2,
+            offset: 1,
+          )),
+          ['rejected', 'tie-second'],
+        );
+        expect(
+          await storage.listOperations(
+            accountId: 'account-a',
+            limit: 2,
+            offset: 4,
+          ),
+          isEmpty,
+        );
+      });
+
+      test('rejects invalid paging arguments', () async {
+        await expectLater(
+          storage.listOperations(accountId: 'account-a', limit: 0),
+          throwsArgumentError,
+        );
+        await expectLater(
+          storage.listOperations(accountId: 'account-a', limit: 1, offset: -1),
+          throwsArgumentError,
+        );
+      });
+    });
+
     group('findDependentOperations', () {
       test('returns operations listing the id, in queue order', () async {
         await storage.insertOperations([

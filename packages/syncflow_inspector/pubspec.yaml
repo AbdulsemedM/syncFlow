@@ -1,0 +1,21 @@
+name: syncflow_inspector
+description: >-
+  Developer diagnostics for SyncFlow: queue statistics, operation details,
+  conflict inspection, an event timeline and redacted diagnostic exports.
+version: 0.7.0-dev.1
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  syncflow: ^0.7.0-dev.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  syncflow_test: ^0.7.0-dev.1

@@ -1,3 +1,8 @@
+## 0.7.0-dev.1
+
+- `listOperations` (`ORDER BY created_at DESC, seq DESC` with `LIMIT` and
+  `OFFSET`).
+
 ## 0.6.0-dev.1
 
 - `countOperations` (`GROUP BY status`).
