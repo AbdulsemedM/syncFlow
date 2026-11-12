@@ -195,6 +195,23 @@ final class DriftSyncStorage implements SyncStorage {
       });
 
   @override
+  Future<Map<SyncOperationStatus, int>> countOperations({
+    required String accountId,
+  }) =>
+      _run(() async {
+        final rows = await _db.customSelect(
+          'SELECT status, COUNT(*) AS n FROM $operationsTable '
+          'WHERE account_id = ? GROUP BY status',
+          variables: [Variable<String>(accountId)],
+        ).get();
+        return {
+          for (final row in rows)
+            SyncOperationStatus.values.byName(row.read<String>('status')):
+                row.read<int>('n'),
+        };
+      });
+
+  @override
   Future<List<SyncOperation>> findDependentOperations(String operationId) =>
       _run(() async {
         // json_each matches whole array elements, so "op-1" never matches

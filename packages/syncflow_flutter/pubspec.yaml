@@ -1,0 +1,21 @@
+name: syncflow_flutter
+description: >-
+  Flutter integration for SyncFlow: sync on startup, resume, connectivity
+  restored and when retries are due, with a listenable sync status.
+version: 0.6.0-dev.1
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  syncflow: ^0.6.0-dev.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  syncflow_test: ^0.6.0-dev.1

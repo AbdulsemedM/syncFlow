@@ -1,3 +1,7 @@
+## 0.6.0-dev.1
+
+- Version aligned with `syncflow` 0.6.0-dev.1.
+
 ## 0.5.0-dev.1
 
 - Version aligned with `syncflow` 0.5.0-dev.1.

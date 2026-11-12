@@ -1,3 +1,8 @@
+## 0.6.0-dev.1
+
+- `SyncEngine.operationCounts()` and `SyncEngine.isClosed`.
+- **Breaking:** `SyncStorage.countOperations` added.
+
 ## 0.5.0-dev.1
 
 - Conflict resolution: `SyncConflict` records stored atomically with the

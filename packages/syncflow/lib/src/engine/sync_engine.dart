@@ -173,6 +173,9 @@ final class SyncEngine {
   /// Whether a run is in progress.
   bool get isSyncing => _activeRun != null;
 
+  /// Whether [close] was called.
+  bool get isClosed => _closed;
+
   /// Whether the application paused the engine.
   bool get isPaused => _paused;
 
@@ -222,6 +225,14 @@ final class SyncEngine {
   /// credentials. Does not start a run by itself.
   void resumeAuthentication(String accountId) =>
       _authenticationRequired.remove(accountId);
+
+  /// The number of operations of the active account per status, or an empty
+  /// map when no account is active.
+  Future<Map<SyncOperationStatus, int>> operationCounts() async {
+    final accountId = _activeAccount();
+    if (accountId == null) return const {};
+    return _storage.countOperations(accountId: accountId);
+  }
 
   /// Settles the conflict of [operationId] with [resolution] and returns the
   /// stored operation.
