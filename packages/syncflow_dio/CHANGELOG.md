@@ -1,3 +1,7 @@
+## 0.4.0-dev.1
+
+- Version aligned with `syncflow` 0.4.0-dev.1.
+
 ## 0.3.0-dev.1
 
 - Initial `DioSyncTransport`: request mapping, `Idempotency-Key` header,

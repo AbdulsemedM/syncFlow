@@ -603,6 +603,99 @@ void runSyncStorageContractTests(
       });
     });
 
+    group('findDependentOperations', () {
+      test('returns operations listing the id, in queue order', () async {
+        await storage.insertOperations([
+          buildTestOperation(id: 'parent'),
+          buildTestOperation(id: 'other'),
+          buildTestOperation(
+            id: 'child-late',
+            dependencies: ['parent'],
+            createdAt: t0.add(const Duration(seconds: 2)),
+          ),
+          buildTestOperation(
+            id: 'child-early',
+            dependencies: ['other', 'parent'],
+            createdAt: t0.add(const Duration(seconds: 1)),
+          ),
+          buildTestOperation(id: 'unrelated', dependencies: ['other']),
+        ]);
+
+        final dependents = await storage.findDependentOperations('parent');
+
+        expect([for (final op in dependents) op.id],
+            ['child-early', 'child-late']);
+        expect(await storage.findDependentOperations('missing'), isEmpty);
+      });
+
+      test('does not match ids that merely contain the id', () async {
+        await storage.insertOperations([
+          buildTestOperation(id: 'op-1'),
+          buildTestOperation(id: 'op-10'),
+          buildTestOperation(id: 'child', dependencies: ['op-10']),
+        ]);
+
+        expect(await storage.findDependentOperations('op-1'), isEmpty);
+      });
+    });
+
+    group('id mappings', () {
+      SyncIdMapping mapping(
+        String localId,
+        String serverId, {
+        String accountId = 'account-a',
+        String entityName = 'customers',
+      }) =>
+          SyncIdMapping(
+            accountId: accountId,
+            entityName: entityName,
+            localId: localId,
+            serverId: serverId,
+            createdAt: t0,
+          );
+
+      Future<String?> resolve(
+        String localId, {
+        String accountId = 'account-a',
+        String entityName = 'customers',
+      }) =>
+          storage.resolveServerId(
+            accountId: accountId,
+            entityName: entityName,
+            localId: localId,
+          );
+
+      test('saves, replaces and scopes by account and entity', () async {
+        expect(await resolve('tmp-1'), isNull);
+
+        await storage.saveIdMapping(mapping('tmp-1', 'srv-1'));
+        await storage.saveIdMapping(mapping('tmp-1', 'srv-2'));
+        await storage.saveIdMapping(
+          mapping('tmp-1', 'srv-b', accountId: 'account-b'),
+        );
+        await storage.saveIdMapping(
+          mapping('tmp-1', 'srv-o', entityName: 'orders'),
+        );
+
+        expect(await resolve('tmp-1'), 'srv-2');
+        expect(await resolve('tmp-1', accountId: 'account-b'), 'srv-b');
+        expect(await resolve('tmp-1', entityName: 'orders'), 'srv-o');
+        expect(await resolve('tmp-2'), isNull);
+      });
+
+      test('are rolled back with a failed transaction', () async {
+        await expectLater(
+          storage.runInTransaction<void>(() async {
+            await storage.saveIdMapping(mapping('tmp-1', 'srv-1'));
+            throw StateError('abort');
+          }),
+          throwsStateError,
+        );
+
+        expect(await resolve('tmp-1'), isNull);
+      });
+    });
+
     group('checkpoints', () {
       SyncCheckpoint checkpoint(String account, String entity, String cursor) =>
           SyncCheckpoint(

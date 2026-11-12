@@ -43,9 +43,69 @@ void main() {
       expect(await tableNames(database), [
         'customers',
         'syncflow_checkpoints',
+        'syncflow_id_mappings',
         'syncflow_metadata',
         'syncflow_operations',
       ]);
+      expect(DriftSyncStorage.schemaVersion, 2);
+    });
+
+    test('upgrades a version 1 database, preserving pending work', () async {
+      // Build a database exactly as schema version 1 left it.
+      final v1 = DriftSyncStorage(database);
+      await v1.initialize();
+      await v1.insertOperation(
+        buildTestOperation(id: 'pending-1', payload: {'name': 'Ada'}),
+      );
+      await v1.insertOperation(
+        buildTestOperation(
+          id: 'retry-1',
+          status: SyncOperationStatus.retryScheduled,
+          attempts: 3,
+          nextAttemptAt: DateTime.utc(2026, 5, 2),
+        ),
+      );
+      await database.customStatement('DROP TABLE syncflow_id_mappings');
+      await database.customStatement(
+        "UPDATE syncflow_metadata SET value = '1' "
+        "WHERE key = 'schema_version'",
+      );
+
+      final upgraded = DriftSyncStorage(database);
+      await upgraded.initialize();
+
+      final version = await database
+          .customSelect(
+            "SELECT value FROM syncflow_metadata WHERE key = 'schema_version'",
+          )
+          .getSingle();
+      expect(version.read<String>('value'), '2');
+      expect(
+        (await upgraded.getOperation('pending-1'))!.payload,
+        {'name': 'Ada'},
+      );
+      final retry = (await upgraded.getOperation('retry-1'))!;
+      expect(retry.status, SyncOperationStatus.retryScheduled);
+      expect(retry.attempts, 3);
+      expect(retry.idempotencyKey, 'idem-retry-1');
+
+      await upgraded.saveIdMapping(
+        SyncIdMapping(
+          accountId: 'account-a',
+          entityName: 'customers',
+          localId: 'tmp-1',
+          serverId: 'srv-1',
+          createdAt: t0,
+        ),
+      );
+      expect(
+        await upgraded.resolveServerId(
+          accountId: 'account-a',
+          entityName: 'customers',
+          localId: 'tmp-1',
+        ),
+        'srv-1',
+      );
     });
 
     test('records its schema version and initializes idempotently', () async {

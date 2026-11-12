@@ -58,6 +58,34 @@ final class OperationAcknowledged extends SyncEvent {
   final SyncResponse response;
 }
 
+/// The server assigned [serverId] to an entity created locally as [localId].
+///
+/// Emitted after the mapping is stored together with the acknowledgement.
+/// Update your local rows if you key them by server ID. Operations already
+/// queued against [localId] are sent to [serverId] automatically.
+final class EntityIdAssigned extends SyncEvent {
+  /// Creates the event.
+  const EntityIdAssigned({
+    required this.accountId,
+    required this.entityName,
+    required this.localId,
+    required this.serverId,
+    required super.at,
+  });
+
+  /// Account scope of the entity.
+  final String accountId;
+
+  /// Registered entity name.
+  final String entityName;
+
+  /// The temporary ID used locally.
+  final String localId;
+
+  /// The ID assigned by the server.
+  final String serverId;
+}
+
 /// An operation failed transiently and is scheduled for another attempt at
 /// its `nextAttemptAt`.
 final class OperationRetryScheduled extends SyncEvent {

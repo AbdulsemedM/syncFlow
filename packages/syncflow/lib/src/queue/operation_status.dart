@@ -3,11 +3,13 @@
 /// Allowed transitions (anything else is rejected):
 ///
 /// ```text
-/// pending ─────────► leased, cancelled
+/// pending ─────────► leased, cancelled,
+///                    rejected (a prerequisite was rejected)
 /// leased ──────────► sending, pending (lease released or expired)
 /// sending ─────────► acknowledged, retryScheduled, conflict, rejected,
 ///                    pending (crash recovery of an expired lease)
-/// retryScheduled ──► pending, leased (claiming a due retry), cancelled
+/// retryScheduled ──► pending, leased (claiming a due retry), cancelled,
+///                    rejected (a prerequisite was rejected)
 /// conflict ────────► pending (after resolution), cancelled
 /// rejected ────────► pending (after correction), cancelled
 /// acknowledged ────► (terminal)
@@ -64,6 +66,7 @@ const Map<SyncOperationStatus, Set<SyncOperationStatus>> _allowedTransitions = {
   SyncOperationStatus.pending: {
     SyncOperationStatus.leased,
     SyncOperationStatus.cancelled,
+    SyncOperationStatus.rejected,
   },
   SyncOperationStatus.leased: {
     SyncOperationStatus.sending,
@@ -80,6 +83,7 @@ const Map<SyncOperationStatus, Set<SyncOperationStatus>> _allowedTransitions = {
     SyncOperationStatus.pending,
     SyncOperationStatus.leased,
     SyncOperationStatus.cancelled,
+    SyncOperationStatus.rejected,
   },
   SyncOperationStatus.conflict: {
     SyncOperationStatus.pending,

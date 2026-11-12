@@ -1,5 +1,6 @@
 import '../adapters/sync_storage.dart';
 import '../models/exceptions.dart';
+import '../models/sync_error.dart';
 import '../utils/clock.dart';
 import '../utils/id_generator.dart';
 import 'operation.dart';
@@ -120,6 +121,63 @@ final class OperationQueue {
       limit: limit,
     );
   }
+
+  /// Returns a rejected operation to the queue, typically after the
+  /// application corrected the data or the server-side cause.
+  ///
+  /// The attempt counter, error and retry time are reset; the ID and
+  /// idempotency key are kept. With [includeDependents] (the default), every
+  /// operation that was rejected because this one was rejected is re-queued
+  /// too, recursively. Everything happens in one storage transaction.
+  ///
+  /// Returns the re-queued operations, starting with [operationId]. Throws an
+  /// [OperationNotFoundException], or an [InvalidStateTransitionException] if
+  /// the operation is not rejected.
+  Future<List<SyncOperation>> retry(
+    String operationId, {
+    bool includeDependents = true,
+  }) =>
+      _storage.runInTransaction(() async {
+        final operation = await _storage.getOperation(operationId);
+        if (operation == null) throw OperationNotFoundException(operationId);
+        if (operation.status != SyncOperationStatus.rejected) {
+          throw InvalidStateTransitionException(
+            operationId: operationId,
+            from: operation.status,
+            to: SyncOperationStatus.pending,
+          );
+        }
+
+        final now = _clock.now();
+        final requeued = <SyncOperation>[];
+        final pendingVisit = [operation];
+        final seen = {operation.id};
+        while (pendingVisit.isNotEmpty) {
+          final current = pendingVisit.removeAt(0);
+          requeued.add(
+            await _storage.updateOperation(
+              current
+                  .transitionTo(SyncOperationStatus.pending, at: now)
+                  .copyWith(
+                    attempts: 0,
+                    clearLastError: true,
+                    clearNextAttemptAt: true,
+                  ),
+            ),
+          );
+          if (!includeDependents) break;
+          for (final dependent
+              in await _storage.findDependentOperations(current.id)) {
+            final rejectedForDependency = dependent.status ==
+                    SyncOperationStatus.rejected &&
+                dependent.lastError?.category == SyncErrorCategory.dependency;
+            if (rejectedForDependency && seen.add(dependent.id)) {
+              pendingVisit.add(dependent);
+            }
+          }
+        }
+        return requeued;
+      });
 
   /// Cancels the operation with [operationId] and returns the stored result.
   ///

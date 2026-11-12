@@ -43,8 +43,10 @@ Guarantees:
 2. Recover expired leases.
 3. Repeat until nothing is ready:
    - Fetch the active account's eligible operations.
-   - Hold back any whose dependencies are not `acknowledged` (`blocked`). A
-     dependency that no longer exists counts as satisfied.
+   - Check each operation's dependencies (see
+     [entities and dependencies](entities-and-dependencies.md)): ready,
+     waiting (`blocked`), or failed. A failed operation is rejected without
+     being sent, which can cascade to its own dependents.
    - Deliver the rest with at most `maxConcurrentOperations` in flight.
    - Before each operation, re-check the account, pause and close state.
 4. Emit `SyncRunCompleted` with a `SyncRunResult`.
@@ -79,11 +81,9 @@ replaces the computed delay (no jitter), capped at `maxRetryAfter`.
 `maxAttempts` defaults to unlimited, because offline-first devices may be
 offline for days.
 
-## Known limitations (addressed in later steps)
+## Known limitations
 
-- A `rejected`, `conflict` or `cancelled` dependency blocks its dependents
-  indefinitely. Failure propagation is planned for step 5.
-- Server-assigned IDs are not yet rewritten into dependent operations
-  (step 5).
 - Acknowledgement metadata (such as the server version) is available in
-  `OperationAcknowledged` but is not yet persisted on the operation.
+  `OperationAcknowledged` but is not persisted on the operation.
+- A `conflict` dependency keeps its dependents waiting until the conflict is
+  resolved (step 6).

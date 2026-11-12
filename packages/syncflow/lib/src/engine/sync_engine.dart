@@ -3,9 +3,12 @@ import 'dart:math';
 
 import '../adapters/sync_storage.dart';
 import '../adapters/sync_transport.dart';
+import '../entities/sync_entity.dart';
 import '../events/sync_event.dart';
 import '../executor/operation_executor.dart';
 import '../executor/response_classifier.dart';
+import '../models/exceptions.dart';
+import '../models/sync_error.dart';
 import '../queue/operation.dart';
 import '../queue/operation_status.dart';
 import '../scheduler/retry_policy.dart';
@@ -81,11 +84,16 @@ final class SyncEngine {
   ///
   /// [activeAccount] returns the currently signed-in account, or `null` when
   /// nobody is signed in. Only that account's operations are delivered.
+  ///
+  /// With [entities], acknowledged creates that receive a server-assigned ID
+  /// record an ID mapping (see `RestRequestBuilder`) and emit
+  /// [EntityIdAssigned].
   SyncEngine({
     required SyncStorage storage,
     required SyncTransport transport,
     required SyncRequestBuilder requestBuilder,
     required String? Function() activeAccount,
+    SyncEntityRegistry? entities,
     SyncEngineConfig config = const SyncEngineConfig(),
     RetryPolicy? retryPolicy,
     SyncResponseClassifier classifier = const HttpResponseClassifier(),
@@ -107,6 +115,7 @@ final class SyncEngine {
       workerId: workerId,
       leaseDuration: config.leaseDuration,
       emit: _emit,
+      entities: entities,
     );
   }
 
@@ -236,16 +245,32 @@ final class SyncEngine {
         limit: _config.batchSize + processed.length,
       );
       final ready = <SyncOperation>[];
+      var propagated = false;
       for (final operation in eligible) {
         if (processed.contains(operation.id)) continue;
-        if (await _dependenciesSatisfied(operation)) {
-          ready.add(operation);
-          if (ready.length == _config.batchSize) break;
-        } else {
-          blocked.add(operation.id);
+        switch (await _dependencyState(operation)) {
+          case _Ready():
+            ready.add(operation);
+          case _Waiting():
+            blocked.add(operation.id);
+          case _Failed(:final dependency):
+            processed.add(operation.id);
+            if (await _rejectForDependency(operation, dependency)) {
+              tally.update(
+                ExecutionResult.rejected,
+                (count) => count + 1,
+                ifAbsent: () => 1,
+              );
+              propagated = true;
+            }
         }
+        if (ready.length == _config.batchSize) break;
       }
-      if (ready.isEmpty) break;
+      // Rejections can unblock nothing but may cascade: look again.
+      if (ready.isEmpty) {
+        if (propagated) continue;
+        break;
+      }
       stop = await _deliver(ready, accountId, tally, processed);
     }
 
@@ -301,16 +326,56 @@ final class SyncEngine {
     return stop;
   }
 
-  // A dependency is satisfied once acknowledged. A dependency that no longer
-  // exists is treated as satisfied (acknowledged history may be compacted).
-  Future<bool> _dependenciesSatisfied(SyncOperation operation) async {
+  // A dependency is satisfied once acknowledged, or when it was cancelled
+  // (discarded work) or no longer exists (compacted history). A rejected
+  // dependency can never be satisfied by waiting, so the dependent fails too.
+  // Anything else means waiting.
+  Future<_DependencyState> _dependencyState(SyncOperation operation) async {
+    var waiting = false;
     for (final dependencyId in operation.dependencies) {
       final dependency = await _storage.getOperation(dependencyId);
-      if (dependency != null &&
-          dependency.status != SyncOperationStatus.acknowledged) {
-        return false;
+      switch (dependency?.status) {
+        case null ||
+              SyncOperationStatus.acknowledged ||
+              SyncOperationStatus.cancelled:
+          continue;
+        case SyncOperationStatus.rejected:
+          return _Failed(dependency!);
+        case _:
+          waiting = true;
       }
     }
+    return waiting ? const _Waiting() : const _Ready();
+  }
+
+  // Rejects [operation] because [dependency] was rejected. Returns false if
+  // the operation changed concurrently (another worker got there first).
+  Future<bool> _rejectForDependency(
+    SyncOperation operation,
+    SyncOperation dependency,
+  ) async {
+    final now = _clock.now();
+    final SyncOperation stored;
+    try {
+      stored = await _storage.updateOperation(
+        operation.transitionTo(SyncOperationStatus.rejected, at: now).copyWith(
+              clearNextAttemptAt: true,
+              lastError: SyncError(
+                category: SyncErrorCategory.dependency,
+                message: 'Prerequisite operation "${dependency.id}" '
+                    'was rejected.',
+                isRetryable: false,
+                operationId: operation.id,
+                occurredAt: now,
+              ),
+            ),
+      );
+    } on StaleOperationException {
+      return false;
+    } on OperationNotFoundException {
+      return false;
+    }
+    _emit(OperationRejected(operation: stored, at: now));
     return true;
   }
 
@@ -337,4 +402,22 @@ final class SyncEngine {
   void _ensureOpen() {
     if (_closed) throw StateError('SyncEngine has been closed.');
   }
+}
+
+sealed class _DependencyState {
+  const _DependencyState();
+}
+
+final class _Ready extends _DependencyState {
+  const _Ready();
+}
+
+final class _Waiting extends _DependencyState {
+  const _Waiting();
+}
+
+final class _Failed extends _DependencyState {
+  const _Failed(this.dependency);
+
+  final SyncOperation dependency;
 }

@@ -36,7 +36,7 @@ analysis and tests.
   shared-transaction outbox; must pass the storage contract suite.
 - [x] **Step 4: Dio adapter.** Request mapping, idempotency headers,
   `Retry-After`, auth hooks, status classification.
-- [ ] **Step 5: Entities and dependencies.** Entity registration, REST
+- [x] **Step 5: Entities and dependencies.** Entity registration, REST
   endpoint mapping, dependency gating, temporary-ID rewriting.
 - [ ] **Step 6: Conflicts and pull.** Conflict resolvers, cursor-based pull,
   checkpoints, tombstones.
@@ -62,6 +62,7 @@ dart format .                    # format
 
 - [Operation lifecycle and initial contracts](docs/architecture/operation-lifecycle.md)
 - [Execution engine](docs/architecture/execution-engine.md)
+- [Entities and dependencies](docs/architecture/entities-and-dependencies.md)
 - [Drift adapter and transactional outbox](packages/syncflow_drift/README.md)
 - [Dio transport](packages/syncflow_dio/README.md)
 - [Architecture decision records](docs/architecture/decisions/)

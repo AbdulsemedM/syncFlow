@@ -1,3 +1,7 @@
+## 0.4.0-dev.1
+
+- In-memory and contract-test support for dependent lookup and ID mappings.
+
 ## 0.3.0-dev.1
 
 - `InMemorySyncStorage.runInTransaction` with savepoint rollback; all calls

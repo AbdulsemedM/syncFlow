@@ -7,7 +7,7 @@ typedef S = SyncOperationStatus;
 /// The specification (blueprint §9.4 plus documented additions), written out
 /// independently of the implementation so accidental changes are caught.
 const expectedTransitions = <S, Set<S>>{
-  S.pending: {S.leased, S.cancelled},
+  S.pending: {S.leased, S.cancelled, S.rejected},
   S.leased: {S.sending, S.pending},
   S.sending: {
     S.acknowledged,
@@ -16,7 +16,7 @@ const expectedTransitions = <S, Set<S>>{
     S.rejected,
     S.pending
   },
-  S.retryScheduled: {S.pending, S.leased, S.cancelled},
+  S.retryScheduled: {S.pending, S.leased, S.cancelled, S.rejected},
   S.conflict: {S.pending, S.cancelled},
   S.rejected: {S.pending, S.cancelled},
   S.acknowledged: {},

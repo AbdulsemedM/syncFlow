@@ -1,3 +1,9 @@
+## 0.4.0-dev.1
+
+- Schema version 2: `syncflow_id_mappings` table (migration tested with pending
+  operations).
+- `findDependentOperations` via `json_each`, `saveIdMapping`, `resolveServerId`.
+
 ## 0.3.0-dev.1
 
 - Initial `DriftSyncStorage` (shared and separate database modes), passing the

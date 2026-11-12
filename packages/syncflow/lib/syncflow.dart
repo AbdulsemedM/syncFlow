@@ -9,6 +9,8 @@ export 'src/adapters/sync_storage.dart';
 export 'src/adapters/sync_transport.dart';
 export 'src/engine/sync_engine.dart';
 export 'src/engine/sync_run_result.dart';
+export 'src/entities/rest_request_builder.dart';
+export 'src/entities/sync_entity.dart';
 export 'src/events/sync_event.dart';
 export 'src/executor/delivery_outcome.dart';
 export 'src/executor/operation_executor.dart'
@@ -17,6 +19,7 @@ export 'src/executor/response_classifier.dart';
 export 'src/models/exceptions.dart';
 export 'src/models/sync_checkpoint.dart';
 export 'src/models/sync_error.dart';
+export 'src/models/sync_id_mapping.dart';
 export 'src/models/sync_request.dart';
 export 'src/models/sync_response.dart';
 export 'src/queue/operation.dart';
