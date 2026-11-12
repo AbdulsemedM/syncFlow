@@ -151,6 +151,40 @@ final class InMemorySyncStorage implements SyncStorage {
       });
 
   @override
+  Future<List<SyncOperation>> listOperations({
+    required String accountId,
+    required int limit,
+    int offset = 0,
+    Set<SyncOperationStatus>? statuses,
+  }) =>
+      _guard(() async {
+        _checkPage(limit, offset);
+        final matches = <(SyncOperation, int)>[
+          for (final stored in _operations.values)
+            if (_decode(stored.json) case final operation
+                when operation.accountId == accountId &&
+                    (statuses == null || statuses.contains(operation.status)))
+              (operation, stored.sequence),
+        ]..sort((a, b) {
+            final byCreation = b.$1.createdAt.compareTo(a.$1.createdAt);
+            return byCreation != 0 ? byCreation : b.$2.compareTo(a.$2);
+          });
+        return [
+          for (final (operation, _) in matches.skip(offset).take(limit))
+            operation,
+        ];
+      });
+
+  static void _checkPage(int limit, int offset) {
+    if (limit < 1) {
+      throw ArgumentError.value(limit, 'limit', 'must be positive');
+    }
+    if (offset < 0) {
+      throw ArgumentError.value(offset, 'offset', 'must not be negative');
+    }
+  }
+
+  @override
   Future<List<SyncOperation>> findDependentOperations(String operationId) =>
       _guard(() async {
         final dependents = <(SyncOperation, int)>[

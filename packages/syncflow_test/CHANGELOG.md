@@ -1,3 +1,7 @@
+## 0.7.0-dev.1
+
+- `listOperations` in `InMemorySyncStorage` and the contract suite.
+
 ## 0.6.0-dev.1
 
 - `countOperations` in `InMemorySyncStorage` and the contract suite.

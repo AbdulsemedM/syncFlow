@@ -170,6 +170,10 @@ final class SyncEngine {
   /// Engine events. Operation events are emitted after the state is stored.
   Stream<SyncEvent> get events => _events.stream;
 
+  /// The currently signed-in account, as reported by the `activeAccount`
+  /// callback, or `null` when nobody is signed in.
+  String? get activeAccountId => _activeAccount();
+
   /// Whether a run is in progress.
   bool get isSyncing => _activeRun != null;
 

@@ -2,7 +2,7 @@ name: syncflow_drift
 description: >-
   Drift (SQLite) storage adapter for SyncFlow: durable operations, atomic
   leases, migrations and a transactional outbox shared with your database.
-version: 0.6.0-dev.1
+version: 0.7.0-dev.1
 
 environment:
   sdk: ^3.6.0
@@ -10,8 +10,8 @@ environment:
 resolution: workspace
 
 dependencies:
-  syncflow: ^0.6.0-dev.1
+  syncflow: ^0.7.0-dev.1
   drift: ^2.31.0
 dev_dependencies:
   test: ^1.25.0
-  syncflow_test: ^0.6.0-dev.1
+  syncflow_test: ^0.7.0-dev.1

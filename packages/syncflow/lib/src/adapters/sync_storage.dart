@@ -96,6 +96,19 @@ abstract interface class SyncStorage {
     required String accountId,
   });
 
+  /// Returns operations of [accountId] for inspection, newest first: ordered
+  /// by `createdAt` descending, ties broken by reverse insertion order.
+  ///
+  /// When [statuses] is given, only operations in one of those states are
+  /// returned. Skips [offset] matches and returns at most [limit]. Throws an
+  /// [ArgumentError] if [limit] is not positive or [offset] is negative.
+  Future<List<SyncOperation>> listOperations({
+    required String accountId,
+    required int limit,
+    int offset = 0,
+    Set<SyncOperationStatus>? statuses,
+  });
+
   /// Returns every operation that lists [operationId] among its dependencies,
   /// in the same order as [getEligibleOperations].
   Future<List<SyncOperation>> findDependentOperations(String operationId);

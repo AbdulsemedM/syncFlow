@@ -1,3 +1,9 @@
+## 0.7.0-dev.1
+
+- `SyncEngine.activeAccountId`.
+- **Breaking:** `SyncStorage.listOperations` added (newest first, optional
+  status filter, `limit` and `offset`).
+
 ## 0.6.0-dev.1
 
 - `SyncEngine.operationCounts()` and `SyncEngine.isClosed`.
