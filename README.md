@@ -38,7 +38,7 @@ analysis and tests.
   `Retry-After`, auth hooks, status classification.
 - [x] **Step 5: Entities and dependencies.** Entity registration, REST
   endpoint mapping, dependency gating, temporary-ID rewriting.
-- [ ] **Step 6: Conflicts and pull.** Conflict resolvers, cursor-based pull,
+- [x] **Step 6: Conflicts and pull.** Conflict resolvers, cursor-based pull,
   checkpoints, tombstones.
 - [ ] **Step 7: Flutter integration.**
 - [ ] **Step 8: Inspector.**
@@ -63,6 +63,7 @@ dart format .                    # format
 - [Operation lifecycle and initial contracts](docs/architecture/operation-lifecycle.md)
 - [Execution engine](docs/architecture/execution-engine.md)
 - [Entities and dependencies](docs/architecture/entities-and-dependencies.md)
+- [Conflicts and pull](docs/architecture/conflicts-and-pull.md)
 - [Drift adapter and transactional outbox](packages/syncflow_drift/README.md)
 - [Dio transport](packages/syncflow_dio/README.md)
 - [Architecture decision records](docs/architecture/decisions/)

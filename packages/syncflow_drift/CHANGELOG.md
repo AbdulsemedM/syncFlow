@@ -1,3 +1,8 @@
+## 0.5.0-dev.1
+
+- Schema version 3: `syncflow_conflicts` table.
+- Conflict persistence methods.
+
 ## 0.4.0-dev.1
 
 - Schema version 2: `syncflow_id_mappings` table (migration tested with pending

@@ -7,6 +7,7 @@ library;
 
 export 'src/fake_clock.dart';
 export 'src/fake_sync_transport.dart';
+export 'src/in_memory_entity_adapter.dart';
 export 'src/in_memory_sync_storage.dart';
 export 'src/operation_builder.dart';
 export 'src/sequential_id_generator.dart';

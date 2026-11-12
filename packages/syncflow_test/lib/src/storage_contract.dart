@@ -696,6 +696,90 @@ void runSyncStorageContractTests(
       });
     });
 
+    group('conflicts', () {
+      SyncConflict conflict(
+        String operationId, {
+        String accountId = 'account-a',
+        Map<String, Object?>? remoteData = const {'name': 'Remote'},
+        String? remoteVersion = '"v9"',
+        Duration offset = Duration.zero,
+      }) =>
+          SyncConflict(
+            operationId: operationId,
+            accountId: accountId,
+            entityName: 'customers',
+            entityId: 'c-$operationId',
+            remoteData: remoteData,
+            remoteVersion: remoteVersion,
+            detectedAt: t0.add(offset),
+          );
+
+      test('round-trips every field and replaces by operation', () async {
+        await storage.saveConflict(
+          conflict(
+            'op-1',
+            remoteData: {
+              'name': 'Remote',
+              'tags': ['a'],
+              'nested': {'n': 1},
+            },
+          ),
+        );
+
+        final read = (await storage.getConflict('op-1'))!;
+        expect(read.accountId, 'account-a');
+        expect(read.entityName, 'customers');
+        expect(read.entityId, 'c-op-1');
+        expect(read.remoteData, {
+          'name': 'Remote',
+          'tags': ['a'],
+          'nested': {'n': 1},
+        });
+        expect(read.remoteVersion, '"v9"');
+        expect(read.detectedAt, t0);
+
+        await storage.saveConflict(
+          conflict('op-1', remoteData: null, remoteVersion: null),
+        );
+        final replaced = (await storage.getConflict('op-1'))!;
+        expect(replaced.remoteData, isNull);
+        expect(replaced.remoteVersion, isNull);
+      });
+
+      test('lists by account, oldest first, and deletes', () async {
+        await storage.saveConflict(
+          conflict('late', offset: const Duration(minutes: 2)),
+        );
+        await storage.saveConflict(conflict('early'));
+        await storage.saveConflict(conflict('other', accountId: 'account-b'));
+
+        expect(
+          [
+            for (final c in await storage.listConflicts(accountId: 'account-a'))
+              c.operationId,
+          ],
+          ['early', 'late'],
+        );
+
+        await storage.deleteConflict('early');
+        await storage.deleteConflict('missing');
+        expect(await storage.getConflict('early'), isNull);
+        expect(
+            await storage.listConflicts(accountId: 'account-a'), hasLength(1));
+      });
+
+      test('are rolled back with a failed transaction', () async {
+        await expectLater(
+          storage.runInTransaction<void>(() async {
+            await storage.saveConflict(conflict('op-1'));
+            throw StateError('abort');
+          }),
+          throwsStateError,
+        );
+        expect(await storage.getConflict('op-1'), isNull);
+      });
+    });
+
     group('checkpoints', () {
       SyncCheckpoint checkpoint(String account, String entity, String cursor) =>
           SyncCheckpoint(

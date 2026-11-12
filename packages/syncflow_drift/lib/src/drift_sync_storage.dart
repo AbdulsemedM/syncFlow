@@ -247,6 +247,81 @@ final class DriftSyncStorage implements SyncStorage {
       });
 
   @override
+  Future<void> saveConflict(SyncConflict conflict) => _run(() async {
+        final data = conflict.remoteData;
+        await _db.customInsert(
+          'INSERT INTO $conflictsTable (operation_id, account_id, entity_name, '
+          'entity_id, remote_data, remote_version, detected_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT (operation_id) DO UPDATE SET '
+          'account_id = excluded.account_id, '
+          'entity_name = excluded.entity_name, '
+          'entity_id = excluded.entity_id, '
+          'remote_data = excluded.remote_data, '
+          'remote_version = excluded.remote_version, '
+          'detected_at = excluded.detected_at',
+          variables: [
+            Variable<String>(conflict.operationId),
+            Variable<String>(conflict.accountId),
+            Variable<String>(conflict.entityName),
+            Variable<String>(conflict.entityId),
+            Variable<String>(data == null ? null : jsonEncode(data)),
+            Variable<String>(conflict.remoteVersion),
+            Variable<int>(_micros(conflict.detectedAt)),
+          ],
+        );
+      });
+
+  @override
+  Future<SyncConflict?> getConflict(String operationId) => _run(() async {
+        final row = await _db.customSelect(
+          'SELECT * FROM $conflictsTable WHERE operation_id = ?',
+          variables: [Variable<String>(operationId)],
+        ).getSingleOrNull();
+        return row == null ? null : _decodeConflict(row);
+      });
+
+  @override
+  Future<List<SyncConflict>> listConflicts({required String accountId}) =>
+      _run(() async {
+        final rows = await _db.customSelect(
+          'SELECT * FROM $conflictsTable WHERE account_id = ? '
+          'ORDER BY detected_at, operation_id',
+          variables: [Variable<String>(accountId)],
+        ).get();
+        return [for (final row in rows) _decodeConflict(row)];
+      });
+
+  @override
+  Future<void> deleteConflict(String operationId) => _run(() async {
+        await _db.customUpdate(
+          'DELETE FROM $conflictsTable WHERE operation_id = ?',
+          variables: [Variable<String>(operationId)],
+          updateKind: UpdateKind.delete,
+        );
+      });
+
+  static SyncConflict _decodeConflict(QueryRow row) {
+    final rawData = row.readNullable<String>('remote_data');
+    final data = rawData == null ? null : jsonDecode(rawData);
+    if (data is! Map<String, Object?>?) {
+      throw FormatException(
+        'Corrupt SyncFlow conflict "${row.read<String>('operation_id')}": '
+        'remote_data is not a JSON object.',
+      );
+    }
+    return SyncConflict(
+      operationId: row.read<String>('operation_id'),
+      accountId: row.read<String>('account_id'),
+      entityName: row.read<String>('entity_name'),
+      entityId: row.read<String>('entity_id'),
+      remoteData: data,
+      remoteVersion: row.readNullable<String>('remote_version'),
+      detectedAt: _fromMicros(row.read<int>('detected_at')),
+    );
+  }
+
+  @override
   Future<SyncOperation> updateOperation(SyncOperation operation) =>
       _run(() async {
         final stored = await _compareAndSet(

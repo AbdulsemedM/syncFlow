@@ -1,3 +1,4 @@
+import '../conflict/conflict.dart';
 import '../models/exceptions.dart';
 import '../models/sync_checkpoint.dart';
 import '../models/sync_id_mapping.dart';
@@ -103,6 +104,18 @@ abstract interface class SyncStorage {
     required String entityName,
     required String localId,
   });
+
+  /// Stores [conflict], replacing any conflict for the same operation.
+  Future<void> saveConflict(SyncConflict conflict);
+
+  /// Returns the unresolved conflict of [operationId], or `null`.
+  Future<SyncConflict?> getConflict(String operationId);
+
+  /// Returns the unresolved conflicts of [accountId], oldest first.
+  Future<List<SyncConflict>> listConflicts({required String accountId});
+
+  /// Removes the conflict of [operationId]. Does nothing if it is absent.
+  Future<void> deleteConflict(String operationId);
 
   /// Replaces the stored operation with [operation] and returns the stored
   /// result, whose revision is `operation.revision + 1`.

@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import '../conflict/conflict.dart';
 import '../models/exceptions.dart';
 import '../models/sync_request.dart';
 import '../models/sync_response.dart';
+import '../pull/pull_endpoint.dart';
+import '../pull/sync_entity_adapter.dart';
 import '../queue/operation.dart';
 
 /// Extracts the server-assigned ID from a successful create response, or
@@ -75,13 +78,33 @@ final class SyncEntity {
   ///
   /// [requestBuilder] replaces the default request mapping entirely for this
   /// entity, for endpoints that do not follow the REST conventions.
+  ///
+  /// [conflictResolver] settles conflicts automatically (see
+  /// [ConflictStrategy]); without one, every conflict waits for manual
+  /// resolution. [remoteStateFrom] extracts the server's state from conflict
+  /// responses.
+  ///
+  /// [pull] and [adapter] enable pull synchronization: remote changes are
+  /// fetched from [pull] and applied through [adapter]. The adapter also
+  /// applies the server's state when a conflict is resolved with [UseRemote].
   SyncEntity({
     required this.name,
     required this.endpoint,
     Map<String, String> references = const {},
     this.serverIdFrom = serverIdFromBodyId,
     this.requestBuilder,
+    this.conflictResolver,
+    this.remoteStateFrom = remoteStateFromBody,
+    this.pull,
+    this.adapter,
   }) : references = Map.unmodifiable(references) {
+    if (pull != null && adapter == null) {
+      throw ArgumentError.value(
+        pull,
+        'pull',
+        'requires an adapter to apply remote changes',
+      );
+    }
     if (name.isEmpty) {
       throw ArgumentError.value(name, 'name', 'must not be empty');
     }
@@ -101,6 +124,18 @@ final class SyncEntity {
 
   /// Custom request mapping for this entity, if any.
   final FutureOr<SyncRequest> Function(SyncOperation operation)? requestBuilder;
+
+  /// Automatic conflict resolution, or `null` for manual resolution.
+  final ConflictResolver? conflictResolver;
+
+  /// Extracts the server's state from conflict responses.
+  final RemoteStateExtractor remoteStateFrom;
+
+  /// Where remote changes are pulled from, or `null` for push-only.
+  final PullEndpoint? pull;
+
+  /// Applies remote state to the local database, if configured.
+  final SyncEntityAdapter? adapter;
 }
 
 /// The set of registered entities.

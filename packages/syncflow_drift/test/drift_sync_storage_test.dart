@@ -43,14 +43,16 @@ void main() {
       expect(await tableNames(database), [
         'customers',
         'syncflow_checkpoints',
+        'syncflow_conflicts',
         'syncflow_id_mappings',
         'syncflow_metadata',
         'syncflow_operations',
       ]);
-      expect(DriftSyncStorage.schemaVersion, 2);
+      expect(DriftSyncStorage.schemaVersion, 3);
     });
 
-    test('upgrades a version 1 database, preserving pending work', () async {
+    test('upgrades a version 1 database to the latest, preserving pending work',
+        () async {
       // Build a database exactly as schema version 1 left it.
       final v1 = DriftSyncStorage(database);
       await v1.initialize();
@@ -66,6 +68,7 @@ void main() {
         ),
       );
       await database.customStatement('DROP TABLE syncflow_id_mappings');
+      await database.customStatement('DROP TABLE syncflow_conflicts');
       await database.customStatement(
         "UPDATE syncflow_metadata SET value = '1' "
         "WHERE key = 'schema_version'",
@@ -79,7 +82,7 @@ void main() {
             "SELECT value FROM syncflow_metadata WHERE key = 'schema_version'",
           )
           .getSingle();
-      expect(version.read<String>('value'), '2');
+      expect(version.read<String>('value'), '3');
       expect(
         (await upgraded.getOperation('pending-1'))!.payload,
         {'name': 'Ada'},
@@ -308,6 +311,97 @@ void main() {
     });
   });
 
+  group('pull into the shared database', () {
+    late SyncFlowDatabase database;
+    late DriftSyncStorage storage;
+    late _CustomerTableAdapter adapter;
+    late FakeSyncTransport transport;
+    late SyncEngine engine;
+
+    setUp(() async {
+      database = await openAppDatabase(NativeDatabase.memory());
+      storage = DriftSyncStorage(database);
+      await storage.initialize();
+      adapter = _CustomerTableAdapter(database);
+      transport = FakeSyncTransport(
+        handler: (_) => SyncResponse(
+          statusCode: 200,
+          body: {
+            'changes': [
+              {
+                'entityId': 'c-1',
+                'type': 'create',
+                'data': {'name': 'Ada'},
+              },
+              {
+                'entityId': 'c-2',
+                'type': 'create',
+                'data': {'name': 'Grace'},
+              },
+            ],
+            'nextCursor': 'p2',
+            'hasMore': false,
+          },
+        ),
+      );
+      final entities = SyncEntityRegistry([
+        SyncEntity(
+          name: 'customers',
+          endpoint: const RestEndpoint.crud('/customers'),
+          pull: const PullEndpoint('/customers/changes'),
+          adapter: adapter,
+        ),
+      ]);
+      engine = SyncEngine(
+        storage: storage,
+        transport: transport,
+        requestBuilder:
+            RestRequestBuilder(entities: entities, storage: storage).build,
+        entities: entities,
+        activeAccount: () => 'account-a',
+        clock: FakeClock(t0),
+      );
+      await engine.initialize();
+    });
+
+    tearDown(() async {
+      await engine.close();
+      await database.close();
+    });
+
+    Future<List<String>> customerIds() async => [
+          for (final row in await database
+              .customSelect('SELECT id FROM customers ORDER BY id')
+              .get())
+            row.read<String>('id'),
+        ];
+
+    Future<String?> cursor() async => (await storage.getCheckpoint(
+          accountId: 'account-a',
+          entityName: 'customers',
+        ))
+            ?.cursor;
+
+    test('commits the page and the checkpoint together', () async {
+      final result = await engine.syncNow();
+
+      expect(result.pulledChanges, 2);
+      expect(await customerIds(), ['c-1', 'c-2']);
+      expect(await cursor(), 'p2');
+    });
+
+    test('a failure mid-page rolls back rows and checkpoint', () async {
+      adapter.failAfter = 1;
+
+      final result = await engine.syncNow();
+
+      expect(result.pullFailures, 1);
+      expect(await customerIds(), isEmpty,
+          reason: 'the first row was rolled back');
+      expect(await cursor(), isNull);
+    });
+  });
+
   group('robustness', () {
     late DriftSyncStorage storage;
     late SyncFlowDatabase database;
@@ -411,4 +505,42 @@ extension on DriftSyncStorage {
         now: DateTime.utc(2100),
         limit: 1000,
       );
+}
+
+/// Writes remote customers into the application's own `customers` table.
+final class _CustomerTableAdapter implements SyncEntityAdapter {
+  _CustomerTableAdapter(this.database);
+
+  final GeneratedDatabase database;
+
+  /// Throw after writing this many rows, to simulate a mid-page failure.
+  int? failAfter;
+
+  @override
+  Future<void> applyRemoteChanges(List<RemoteChange> changes) async {
+    var written = 0;
+    for (final change in changes) {
+      if (failAfter != null && written >= failAfter!) {
+        throw Exception('simulated failure');
+      }
+      if (change.type == RemoteChangeType.delete) {
+        await database.customUpdate(
+          'DELETE FROM customers WHERE id = ?',
+          variables: [Variable<String>(change.entityId)],
+        );
+      } else {
+        await database.customInsert(
+          'INSERT OR REPLACE INTO customers (id, name) VALUES (?, ?)',
+          variables: [
+            Variable<String>(change.entityId),
+            Variable<String>(change.data!['name']! as String),
+          ],
+        );
+      }
+      written++;
+    }
+  }
+
+  @override
+  Future<void> prepareFullResync() async {}
 }

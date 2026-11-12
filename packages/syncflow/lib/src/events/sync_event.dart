@@ -1,4 +1,6 @@
+import '../conflict/conflict.dart';
 import '../engine/sync_run_result.dart';
+import '../models/sync_error.dart';
 import '../models/sync_response.dart';
 import '../queue/operation.dart';
 
@@ -84,6 +86,104 @@ final class EntityIdAssigned extends SyncEvent {
 
   /// The ID assigned by the server.
   final String serverId;
+}
+
+/// A conflict needs manual resolution with `SyncEngine.resolveConflict`.
+///
+/// Emitted when no resolver is configured for the entity, the resolver asked
+/// for manual resolution, or the resolver failed.
+final class ConflictDetected extends SyncEvent {
+  /// Creates the event.
+  const ConflictDetected({
+    required this.operation,
+    required this.conflict,
+    required super.at,
+  });
+
+  /// The local operation, in state `conflict`.
+  final SyncOperation operation;
+
+  /// The server's side of the conflict.
+  final SyncConflict conflict;
+}
+
+/// A conflict was settled, automatically or manually.
+final class ConflictResolved extends SyncEvent {
+  /// Creates the event.
+  const ConflictResolved({
+    required this.operation,
+    required this.resolution,
+    required super.at,
+  });
+
+  /// The stored operation after resolution: `pending` (re-sent later) or
+  /// `cancelled` (the server's state was kept).
+  final SyncOperation operation;
+
+  /// How the conflict was settled.
+  final ConflictResolution resolution;
+}
+
+/// A page of remote changes was applied and the checkpoint advanced.
+final class RemoteChangesApplied extends SyncEvent {
+  /// Creates the event.
+  const RemoteChangesApplied({
+    required this.accountId,
+    required this.entityName,
+    required this.changes,
+    required this.cursor,
+    required super.at,
+  });
+
+  /// Account scope.
+  final String accountId;
+
+  /// Entity type.
+  final String entityName;
+
+  /// Number of changes applied.
+  final int changes;
+
+  /// The stored checkpoint cursor after the page.
+  final String? cursor;
+}
+
+/// The server reported an expired cursor; the entity is pulled again from the
+/// beginning after `SyncEntityAdapter.prepareFullResync`.
+final class FullResyncStarted extends SyncEvent {
+  /// Creates the event.
+  const FullResyncStarted({
+    required this.accountId,
+    required this.entityName,
+    required super.at,
+  });
+
+  /// Account scope.
+  final String accountId;
+
+  /// Entity type.
+  final String entityName;
+}
+
+/// Pulling an entity failed. The checkpoint is unchanged; the next pull
+/// resumes from it.
+final class PullFailed extends SyncEvent {
+  /// Creates the event.
+  const PullFailed({
+    required this.accountId,
+    required this.entityName,
+    required this.error,
+    required super.at,
+  });
+
+  /// Account scope.
+  final String accountId;
+
+  /// Entity type.
+  final String entityName;
+
+  /// Sanitized description of the failure.
+  final SyncError error;
 }
 
 /// An operation failed transiently and is scheduled for another attempt at
