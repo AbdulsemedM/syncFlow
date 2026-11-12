@@ -1,3 +1,7 @@
+## 0.6.0-dev.1
+
+- `countOperations` (`GROUP BY status`).
+
 ## 0.5.0-dev.1
 
 - Schema version 3: `syncflow_conflicts` table.

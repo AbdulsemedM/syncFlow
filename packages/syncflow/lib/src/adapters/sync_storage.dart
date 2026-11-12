@@ -90,6 +90,12 @@ abstract interface class SyncStorage {
     required String entityId,
   });
 
+  /// Returns the number of operations of [accountId] per status. Statuses
+  /// without operations are omitted.
+  Future<Map<SyncOperationStatus, int>> countOperations({
+    required String accountId,
+  });
+
   /// Returns every operation that lists [operationId] among its dependencies,
   /// in the same order as [getEligibleOperations].
   Future<List<SyncOperation>> findDependentOperations(String operationId);

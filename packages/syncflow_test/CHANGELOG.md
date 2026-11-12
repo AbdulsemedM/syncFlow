@@ -1,3 +1,7 @@
+## 0.6.0-dev.1
+
+- `countOperations` in `InMemorySyncStorage` and the contract suite.
+
 ## 0.5.0-dev.1
 
 - `InMemoryEntityAdapter` for pull and conflict tests.

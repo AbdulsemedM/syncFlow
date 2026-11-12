@@ -137,6 +137,20 @@ final class InMemorySyncStorage implements SyncStorage {
       });
 
   @override
+  Future<Map<SyncOperationStatus, int>> countOperations({
+    required String accountId,
+  }) =>
+      _guard(() async {
+        final counts = <SyncOperationStatus, int>{};
+        for (final stored in _operations.values) {
+          final operation = _decode(stored.json);
+          if (operation.accountId != accountId) continue;
+          counts.update(operation.status, (n) => n + 1, ifAbsent: () => 1);
+        }
+        return counts;
+      });
+
+  @override
   Future<List<SyncOperation>> findDependentOperations(String operationId) =>
       _guard(() async {
         final dependents = <(SyncOperation, int)>[

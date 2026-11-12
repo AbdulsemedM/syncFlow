@@ -603,6 +603,32 @@ void runSyncStorageContractTests(
       });
     });
 
+    group('countOperations', () {
+      test('counts per status, scoped by account', () async {
+        await storage.insertOperations([
+          buildTestOperation(id: 'p1'),
+          buildTestOperation(id: 'p2'),
+          buildTestOperation(
+            id: 'r1',
+            status: SyncOperationStatus.rejected,
+          ),
+          buildTestOperation(
+            id: 'other',
+            accountId: 'account-b',
+          ),
+        ]);
+
+        expect(await storage.countOperations(accountId: 'account-a'), {
+          SyncOperationStatus.pending: 2,
+          SyncOperationStatus.rejected: 1,
+        });
+        expect(
+          await storage.countOperations(accountId: 'account-c'),
+          isEmpty,
+        );
+      });
+    });
+
     group('findDependentOperations', () {
       test('returns operations listing the id, in queue order', () async {
         await storage.insertOperations([
