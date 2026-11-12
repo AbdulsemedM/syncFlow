@@ -1,3 +1,8 @@
+## 0.5.0-dev.1
+
+- `InMemoryEntityAdapter` for pull and conflict tests.
+- Conflict storage in `InMemorySyncStorage` and the contract suite.
+
 ## 0.4.0-dev.1
 
 - In-memory and contract-test support for dependent lookup and ID mappings.

@@ -7,6 +7,7 @@ library;
 
 export 'src/adapters/sync_storage.dart';
 export 'src/adapters/sync_transport.dart';
+export 'src/conflict/conflict.dart';
 export 'src/engine/sync_engine.dart';
 export 'src/engine/sync_run_result.dart';
 export 'src/entities/rest_request_builder.dart';
@@ -22,6 +23,9 @@ export 'src/models/sync_error.dart';
 export 'src/models/sync_id_mapping.dart';
 export 'src/models/sync_request.dart';
 export 'src/models/sync_response.dart';
+export 'src/pull/pull_endpoint.dart';
+export 'src/pull/remote_change.dart';
+export 'src/pull/sync_entity_adapter.dart';
 export 'src/queue/operation.dart';
 export 'src/queue/operation_queue.dart';
 export 'src/queue/operation_status.dart';

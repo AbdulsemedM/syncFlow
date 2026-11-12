@@ -33,6 +33,9 @@ final class SyncRunResult {
     this.conflicts = 0,
     this.leaseLost = 0,
     this.blocked = 0,
+    this.conflictsResolved = 0,
+    this.pulledChanges = 0,
+    this.pullFailures = 0,
   })  : startedAt = startedAt.toUtc(),
         finishedAt = finishedAt.toUtc();
 
@@ -67,6 +70,15 @@ final class SyncRunResult {
   /// Eligible operations held back by unfinished dependencies.
   final int blocked;
 
+  /// Conflicts settled automatically by an entity's conflict resolver.
+  final int conflictsResolved;
+
+  /// Remote changes applied by pull synchronization.
+  final int pulledChanges;
+
+  /// Entities whose pull failed; their checkpoints are unchanged.
+  final int pullFailures;
+
   /// Operations that needed application attention.
   int get failed => rejected + conflicts;
 
@@ -77,5 +89,6 @@ final class SyncRunResult {
   String toString() => 'SyncRunResult(${stopReason.name}, '
       'acknowledged: $acknowledged, retryScheduled: $retryScheduled, '
       'rejected: $rejected, conflicts: $conflicts, leaseLost: $leaseLost, '
-      'blocked: $blocked)';
+      'blocked: $blocked, conflictsResolved: $conflictsResolved, '
+      'pulledChanges: $pulledChanges, pullFailures: $pullFailures)';
 }

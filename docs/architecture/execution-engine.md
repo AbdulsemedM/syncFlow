@@ -86,4 +86,4 @@ offline for days.
 - Acknowledgement metadata (such as the server version) is available in
   `OperationAcknowledged` but is not persisted on the operation.
 - A `conflict` dependency keeps its dependents waiting until the conflict is
-  resolved (step 6).
+  resolved (see [conflicts and pull](conflicts-and-pull.md)).

@@ -3,12 +3,15 @@ import 'dart:math';
 
 import '../adapters/sync_storage.dart';
 import '../adapters/sync_transport.dart';
+import '../conflict/conflict.dart';
+import '../conflict/conflict_coordinator.dart';
 import '../entities/sync_entity.dart';
 import '../events/sync_event.dart';
 import '../executor/operation_executor.dart';
 import '../executor/response_classifier.dart';
 import '../models/exceptions.dart';
 import '../models/sync_error.dart';
+import '../pull/pull_coordinator.dart';
 import '../queue/operation.dart';
 import '../queue/operation_status.dart';
 import '../scheduler/retry_policy.dart';
@@ -23,6 +26,8 @@ final class SyncEngineConfig {
     this.maxConcurrentOperations = 3,
     this.leaseDuration = const Duration(minutes: 2),
     this.batchSize = 50,
+    this.pullEnabled = true,
+    this.maxPullPagesPerEntity = 100,
   });
 
   /// Maximum number of operations delivered at the same time.
@@ -38,6 +43,13 @@ final class SyncEngineConfig {
 
   /// Number of eligible operations fetched from storage at a time.
   final int batchSize;
+
+  /// Whether [SyncEngine.syncNow] pulls remote changes, after pushing, for
+  /// entities with a pull endpoint and an adapter.
+  final bool pullEnabled;
+
+  /// Upper bound on pages pulled per entity and run.
+  final int maxPullPagesPerEntity;
 
   void _validate() {
     if (maxConcurrentOperations < 1) {
@@ -100,6 +112,7 @@ final class SyncEngine {
     Clock clock = const SystemClock(),
     IdGenerator idGenerator = const UuidV4Generator(),
   })  : _storage = storage,
+        _entities = entities,
         _activeAccount = activeAccount,
         _config = config,
         _clock = clock,
@@ -117,13 +130,30 @@ final class SyncEngine {
       emit: _emit,
       entities: entities,
     );
+    _conflicts = ConflictCoordinator(
+      storage: storage,
+      clock: clock,
+      emit: _emit,
+      entities: entities,
+    );
+    _puller = PullCoordinator(
+      storage: storage,
+      transport: transport,
+      classifier: classifier,
+      clock: clock,
+      emit: _emit,
+      maxPagesPerPull: config.maxPullPagesPerEntity,
+    );
   }
 
   final SyncStorage _storage;
   final String? Function() _activeAccount;
   final SyncEngineConfig _config;
   final Clock _clock;
+  final SyncEntityRegistry? _entities;
   late final OperationExecutor _executor;
+  late final ConflictCoordinator _conflicts;
+  late final PullCoordinator _puller;
   final StreamController<SyncEvent> _events =
       StreamController<SyncEvent>.broadcast();
   final Set<String> _authenticationRequired = {};
@@ -193,6 +223,26 @@ final class SyncEngine {
   void resumeAuthentication(String accountId) =>
       _authenticationRequired.remove(accountId);
 
+  /// Settles the conflict of [operationId] with [resolution] and returns the
+  /// stored operation.
+  ///
+  /// [UseLocal] and [MergeResolution] re-queue the operation on top of the
+  /// server's version; it is sent on the next [syncNow]. [UseRemote] applies
+  /// the server's state through the entity adapter, when one is registered,
+  /// and cancels the operation. Everything happens in one storage
+  /// transaction.
+  ///
+  /// Throws an [OperationNotFoundException], an
+  /// [InvalidStateTransitionException] if the operation is not in conflict, or
+  /// an [ArgumentError] for [RequireManualResolution].
+  Future<SyncOperation> resolveConflict(
+    String operationId,
+    ConflictResolution resolution,
+  ) {
+    _ensureOpen();
+    return _conflicts.resolve(operationId, resolution);
+  }
+
   /// Waits for any run to finish and releases the event stream.
   ///
   /// Does not close the storage or the transport.
@@ -234,6 +284,7 @@ final class SyncEngine {
     await _recoverLeases();
 
     final tally = <ExecutionResult, int>{};
+    final stats = _RunStats();
     final processed = <String>{};
     final blocked = <String>{};
     SyncRunStopReason? stop;
@@ -271,7 +322,13 @@ final class SyncEngine {
         if (propagated) continue;
         break;
       }
-      stop = await _deliver(ready, accountId, tally, processed);
+      stop = await _deliver(ready, accountId, tally, processed, stats);
+    }
+
+    // Pull after push, so local changes reach the server before remote state
+    // is applied, and only when the push phase was not interrupted.
+    if (stop == null && _config.pullEnabled) {
+      stop = await _pullAll(accountId, stats);
     }
 
     blocked.removeAll(processed);
@@ -286,6 +343,9 @@ final class SyncEngine {
       conflicts: tally[ExecutionResult.conflict] ?? 0,
       leaseLost: tally[ExecutionResult.leaseLost] ?? 0,
       blocked: blocked.length,
+      conflictsResolved: stats.conflictsResolved,
+      pulledChanges: stats.pulledChanges,
+      pullFailures: stats.pullFailures,
     );
     _emit(SyncRunCompleted(result: result, at: result.finishedAt));
     return result;
@@ -298,6 +358,7 @@ final class SyncEngine {
     String accountId,
     Map<ExecutionResult, int> tally,
     Set<String> processed,
+    _RunStats stats,
   ) async {
     SyncRunStopReason? stop;
     var next = 0;
@@ -314,6 +375,10 @@ final class SyncEngine {
         processed.add(operation.id);
         final result = await _executor.execute(operation.id);
         tally.update(result, (count) => count + 1, ifAbsent: () => 1);
+        if (result == ExecutionResult.conflict &&
+            await _conflicts.autoResolve(operation.id)) {
+          stats.conflictsResolved++;
+        }
         if (result == ExecutionResult.authenticationRequired) {
           _authenticationRequired.add(accountId);
           stop = SyncRunStopReason.authenticationRequired;
@@ -324,6 +389,33 @@ final class SyncEngine {
     final workers = min(_config.maxConcurrentOperations, ready.length);
     await Future.wait([for (var i = 0; i < workers; i++) worker()]);
     return stop;
+  }
+
+  // Pulls every pull-enabled entity in registration order. A failed entity
+  // keeps its checkpoint and does not stop the others, except when
+  // authentication is required or the run must stop.
+  Future<SyncRunStopReason?> _pullAll(String accountId, _RunStats stats) async {
+    final entities = _entities;
+    if (entities == null) return null;
+    for (final name in entities.names) {
+      final entity = entities[name]!;
+      if (entity.pull == null || entity.adapter == null) continue;
+
+      final current = _activeAccount();
+      final stop = current != accountId
+          ? SyncRunStopReason.accountChanged
+          : _stopReason(current);
+      if (stop != null) return stop;
+
+      final outcome = await _puller.pull(accountId, entity);
+      stats.pulledChanges += outcome.applied;
+      if (outcome.failed) stats.pullFailures++;
+      if (outcome.authenticationRequired) {
+        _authenticationRequired.add(accountId);
+        return SyncRunStopReason.authenticationRequired;
+      }
+    }
+    return null;
   }
 
   // A dependency is satisfied once acknowledged, or when it was cancelled
@@ -420,4 +512,10 @@ final class _Failed extends _DependencyState {
   const _Failed(this.dependency);
 
   final SyncOperation dependency;
+}
+
+final class _RunStats {
+  int conflictsResolved = 0;
+  int pulledChanges = 0;
+  int pullFailures = 0;
 }

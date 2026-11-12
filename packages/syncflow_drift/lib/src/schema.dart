@@ -14,6 +14,9 @@ const checkpointsTable = 'syncflow_checkpoints';
 /// Table mapping local entity IDs to server-assigned IDs.
 const idMappingsTable = 'syncflow_id_mappings';
 
+/// Table holding unresolved conflicts.
+const conflictsTable = 'syncflow_conflicts';
+
 /// Metadata key under which the schema version is stored.
 const schemaVersionKey = 'schema_version';
 
@@ -88,6 +91,21 @@ CREATE TABLE $idMappingsTable (
   created_at INTEGER NOT NULL,
   PRIMARY KEY (account_id, entity_name, local_id)
 )''',
+  ],
+  // 2 -> 3: persisted conflicts awaiting resolution.
+  [
+    '''
+CREATE TABLE $conflictsTable (
+  operation_id TEXT NOT NULL PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  entity_name TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  remote_data TEXT,
+  remote_version TEXT,
+  detected_at INTEGER NOT NULL
+)''',
+    'CREATE INDEX syncflow_conflicts_account '
+        'ON $conflictsTable (account_id, detected_at)',
   ],
 ];
 

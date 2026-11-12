@@ -16,6 +16,7 @@ final class InMemorySyncStorage implements SyncStorage {
   final Map<String, _StoredOperation> _operations = {};
   final Map<(String, String), SyncCheckpoint> _checkpoints = {};
   final Map<(String, String, String), String> _idMappings = {};
+  final Map<String, SyncConflict> _conflicts = {};
   int _nextSequence = 0;
   bool _initialized = false;
   bool _closed = false;
@@ -165,6 +166,29 @@ final class InMemorySyncStorage implements SyncStorage {
       _guard(() async => _idMappings[(accountId, entityName, localId)]);
 
   @override
+  Future<void> saveConflict(SyncConflict conflict) => _guard(() async {
+        _conflicts[conflict.operationId] = conflict;
+      });
+
+  @override
+  Future<SyncConflict?> getConflict(String operationId) =>
+      _guard(() async => _conflicts[operationId]);
+
+  @override
+  Future<List<SyncConflict>> listConflicts({required String accountId}) =>
+      _guard(() async {
+        return [
+          for (final conflict in _conflicts.values)
+            if (conflict.accountId == accountId) conflict,
+        ]..sort((a, b) => a.detectedAt.compareTo(b.detectedAt));
+      });
+
+  @override
+  Future<void> deleteConflict(String operationId) => _guard(() async {
+        _conflicts.remove(operationId);
+      });
+
+  @override
   Future<SyncOperation> updateOperation(SyncOperation operation) =>
       _guard(() async {
         final current = _current(operation.id);
@@ -286,6 +310,7 @@ final class InMemorySyncStorage implements SyncStorage {
     final operations = Map.of(_operations);
     final checkpoints = Map.of(_checkpoints);
     final idMappings = Map.of(_idMappings);
+    final conflicts = Map.of(_conflicts);
     final nextSequence = _nextSequence;
     try {
       return await action();
@@ -299,6 +324,9 @@ final class InMemorySyncStorage implements SyncStorage {
       _idMappings
         ..clear()
         ..addAll(idMappings);
+      _conflicts
+        ..clear()
+        ..addAll(conflicts);
       _nextSequence = nextSequence;
       rethrow;
     }

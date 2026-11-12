@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../adapters/sync_storage.dart';
 import '../adapters/sync_transport.dart';
+import '../conflict/conflict.dart';
 import '../entities/sync_entity.dart';
 import '../events/sync_event.dart';
 import '../models/exceptions.dart';
@@ -228,11 +229,23 @@ final class OperationExecutor {
         return _reject(sending, error, now);
 
       case DeliveryConflicted(:final error, :final response):
-        return _persist(
+        final extract = _entities?[sending.entityName]?.remoteStateFrom ??
+            remoteStateFromBody;
+        final remote = extract(response);
+        final conflict = SyncConflict(
+          operationId: sending.id,
+          accountId: sending.accountId,
+          entityName: sending.entityName,
+          entityId: sending.entityId,
+          remoteData: remote.data,
+          remoteVersion: remote.version,
+          detectedAt: now,
+        );
+        return _persistConflict(
           sending
               .transitionTo(SyncOperationStatus.conflict, at: now)
               .copyWith(lastError: error, clearNextAttemptAt: true),
-          ExecutionResult.conflict,
+          conflict,
           (stored) => OperationConflicted(
             operation: stored,
             response: response,
@@ -240,6 +253,29 @@ final class OperationExecutor {
           ),
         );
     }
+  }
+
+  // The conflict state and its record are committed together, so a conflict
+  // can always be resolved, even after a restart.
+  Future<ExecutionResult> _persistConflict(
+    SyncOperation conflicted,
+    SyncConflict conflict,
+    SyncEvent Function(SyncOperation stored) event,
+  ) async {
+    final SyncOperation stored;
+    try {
+      stored = await _storage.runInTransaction(() async {
+        final result = await _storage.updateOperation(conflicted);
+        await _storage.saveConflict(conflict);
+        return result;
+      });
+    } on StaleOperationException {
+      return _leaseLost(conflicted.id);
+    } on OperationNotFoundException {
+      return _leaseLost(conflicted.id);
+    }
+    _emit(event(stored));
+    return ExecutionResult.conflict;
   }
 
   Future<ExecutionResult> _reject(

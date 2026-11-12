@@ -1,3 +1,20 @@
+## 0.5.0-dev.1
+
+- Conflict resolution: `SyncConflict` records stored atomically with the
+  `conflict` state; `UseLocal`, `UseRemote`, `MergeResolution` and
+  `RequireManualResolution`; `ConflictStrategy` (server wins, client wins,
+  last write wins, manual); per-entity `conflictResolver`;
+  `SyncEngine.resolveConflict`; `ConflictDetected` and `ConflictResolved` events.
+- Pull synchronization: `PullEndpoint`, `SyncEntityAdapter`, `RemoteChange`
+  with tombstones, `parsePullPage`; each page applied atomically with its
+  checkpoint; expired-cursor full resync; `hasPendingLocalChanges` flag;
+  `RemoteChangesApplied`, `FullResyncStarted` and `PullFailed` events.
+- `syncNow()` pushes, then pulls. `SyncEngineConfig.pullEnabled` and
+  `maxPullPagesPerEntity`. `SyncRunResult` reports `conflictsResolved`,
+  `pulledChanges` and `pullFailures`.
+- **Breaking:** `SyncStorage.saveConflict`, `getConflict`, `listConflicts`
+  and `deleteConflict` added.
+
 ## 0.4.0-dev.1
 
 - `SyncEntity`, `RestEndpoint` and `SyncEntityRegistry` for entity registration.
